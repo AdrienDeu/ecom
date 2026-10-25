@@ -24,15 +24,15 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 ## Étape 1 — Fondations du repo GitHub
 
 - [x] Repo GitHub `AdrienDeu/ecom`, branches `main` (prod) et `dev` (intégration)
-- [ ] Protection de `main` : PR obligatoire, 1 review min., checks CI requis, historique linéaire
+- [x] Rulesets `main` et `dev` : PR obligatoire, checks CI + CodeQL requis et à jour, pas de force-push ni suppression ; `dev` en squash + historique linéaire, `main` en merge commit (promotion depuis `dev`)
 - [x] `CODEOWNERS`, templates d'issues et de PR, `.editorconfig`, README
 - [x] Convention de commits (Conventional Commits) — documentée dans le README
 - [ ] Versioning sémantique automatisé (release-please, étape 8)
 - [x] Dependabot configuré (Maven, GitHub Actions ; npm et OpenTofu à décommenter plus tard)
-- [ ] Activer **secret scanning / push protection** et les alertes Dependabot dans les réglages du repo
+- [x] Secret scanning + push protection, alertes et correctifs de sécurité Dependabot, signalement privé de vulnérabilités
 - [x] Workflows `ci.yml` (build + tests Java 25) et `codeql.yml` (Java + Actions), actions épinglées par SHA
 - [x] ADR `docs/adr/0001-socle-technique.md`
-- [ ] Créer les environnements GitHub : `staging`, `production` (avec reviewers obligatoires pour prod)
+- [x] Environnements GitHub `staging` et `production` (déploiement depuis `main` uniquement, approbation obligatoire pour prod)
 - [x] Structure du repo :
   ```
   ecom/
