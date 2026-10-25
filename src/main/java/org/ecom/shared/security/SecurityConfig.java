@@ -8,7 +8,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -52,10 +52,10 @@ class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .cors(Customizer.withDefaults())
-                // CSRF protection is not needed: the API has no session and no cookie. Credentials travel in the
-                // Authorization and X-Cart-Id headers, which a third-party site cannot make the browser send
-                // without passing the CORS preflight.
-                .csrf(AbstractHttpConfigurer::disable)
+                // Double-submit cookie: the token is written in the XSRF-TOKEN cookie and must come back in the
+                // X-XSRF-TOKEN header, which Angular's HttpClient does automatically for same-origin requests.
+                // Defense in depth on top of bearer tokens and CORS; stateless, no session needed.
+                .csrf(CsrfConfigurer::spa)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
     }
