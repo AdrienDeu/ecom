@@ -1,6 +1,7 @@
 package org.ecom.cart;
 
 import static org.hamcrest.Matchers.notNullValue;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -38,7 +39,7 @@ class CartIT extends ApiTestSupport {
                         {"quantity": 1}"""))
                 .andExpect(jsonPath("$.total.amount").value(12.50));
 
-        mvc.perform(delete("/api/cart/items/{id}", productId).header("X-Cart-Id", cartId))
+        mvc.perform(delete("/api/cart/items/{id}", productId).header("X-Cart-Id", cartId).with(csrf()))
                 .andExpect(jsonPath("$.lines").isEmpty());
 
         // Another visitor cannot see the cart without its id
@@ -96,7 +97,7 @@ class CartIT extends ApiTestSupport {
 
     @Test
     void mergeRequiresAuthentication() throws Exception {
-        mvc.perform(post("/api/cart/merge").header("X-Cart-Id", UUID.randomUUID()))
+        mvc.perform(post("/api/cart/merge").header("X-Cart-Id", UUID.randomUUID()).with(csrf()))
                 .andExpect(status().isUnauthorized());
     }
 

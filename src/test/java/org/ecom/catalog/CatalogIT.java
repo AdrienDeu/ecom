@@ -7,9 +7,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+
 import org.ecom.ApiTestSupport;
 import org.ecom.IntegrationTest;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 
 @IntegrationTest
 class CatalogIT extends ApiTestSupport {
@@ -121,6 +124,17 @@ class CatalogIT extends ApiTestSupport {
                 .andExpect(status().isBadRequest());
         mvc.perform(get("/api/catalog/products").param("sort", "password"))
                 .andExpect(status().isBadRequest());
+    }
+
+    /**
+     * Cookie-less bearer requests are exempted by Spring Security; anonymous ones (guest carts) are not.
+     */
+    @Test
+    void anonymousStateChangingRequestWithoutCsrfTokenIsRejected() throws Exception {
+        mvc.perform(post("/api/cart/items").contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productId": "%s", "quantity": 1}""".formatted(UUID.randomUUID())))
+                .andExpect(status().isForbidden());
     }
 
     @Test
