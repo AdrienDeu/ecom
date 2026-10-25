@@ -9,9 +9,14 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 0 — Décisions & cadrage
 
-- [ ] Choisir le **cloud cible** (AWS / GCP / Azure / Scaleway / OVH) — conditionne les modules OpenTofu
-- [ ] Choisir le **frontend** : SSR Thymeleaf (simple) ou SPA séparée (React/Angular/Vue) consommant l'API REST
-- [ ] Choisir la **version Java** : `pom.xml` cible Java 27 (non-LTS) → recommandé : **Java 25 LTS** pour la prod
+- [x] Cloud cible : **AWS**
+- [x] Frontend : **SPA séparée** consommant l'API REST (hébergée sur S3 + CloudFront)
+- [x] Version Java : **Java 25 LTS** (`pom.xml` mis à jour)
+- [x] IaC : **OpenTofu**
+- [x] Framework SPA : **Angular**
+- [x] Runtime backend : **ECS Fargate**
+- [x] Fournisseur d'identité : **Amazon Cognito**
+- [x] Région AWS : **eu-west-3** (Paris)
 - [ ] Définir le périmètre MVP : catalogue, panier, commande, paiement PayPal, compte client, back-office minimal
 - [ ] Définir les SLO (ex. p95 < 300 ms sur le catalogue, taux d'échec paiement < 2 %)
 - [ ] Rédiger les ADR (Architecture Decision Records) dans `docs/adr/`
@@ -27,8 +32,9 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [ ] Structure du repo :
   ```
   ecom/
-  ├── src/                    # application Spring Boot
-  ├── infra/                  # OpenTofu
+  ├── src/                    # backend Spring Boot (API REST)
+  ├── frontend/               # SPA
+  ├── infra/                  # OpenTofu (AWS)
   │   ├── modules/
   │   └── envs/{staging,production}/
   ├── observability/          # dashboards Grafana, règles d'alerte
@@ -42,6 +48,10 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [ ] `compose.yaml` local : PostgreSQL, Redis, Prometheus, Grafana, Tempo/Jaeger
 - [ ] Profils Spring : `local`, `test`, `staging`, `prod` ; config externalisée (variables d'env, pas de secrets dans le repo)
 - [ ] Gestion d'erreurs globale (`ProblemDetail` RFC 9457)
+- [ ] Configuration CORS pour le domaine de la SPA
+- [ ] Initialiser le projet Angular dans `frontend/` (`ng new`, standalone components, angular-eslint, tests unitaires)
+- [ ] Client API Angular généré depuis l'OpenAPI du backend (`openapi-generator`, générateur `typescript-angular`)
+- [ ] Proxy de dev Angular (`proxy.conf.json`) : `/api` → `localhost:8080`
 - [ ] Documentation API OpenAPI (springdoc)
 - [ ] Healthchecks liveness/readiness (actuator probes)
 - [ ] Tests d'intégration avec **Testcontainers**
@@ -49,16 +59,16 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 ## Étape 3 — Domaine métier
 
 - [ ] **Catalogue** : produits, catégories, prix, stock, images, recherche/pagination
-- [ ] **Panier** : panier invité (session/Redis) + fusion à la connexion
+- [ ] **Panier** : panier invité (identifié par un token, stocké dans Redis) + fusion à la connexion
 - [ ] **Commande** : machine à états (`CREATED → PAYMENT_PENDING → PAID → SHIPPED → DELIVERED`, `CANCELLED`, `REFUNDED`)
 - [ ] **Clients** : inscription, adresses, historique de commandes
-- [ ] **Sécurité** : authentification (OAuth2/OIDC via Keycloak ou équivalent), rôles `CUSTOMER` / `ADMIN`
+- [ ] **Sécurité** : Cognito User Pool + client public SPA (Authorization Code + PKCE, Hosted UI / Managed Login) ; Angular via `angular-auth-oidc-client` ; le backend valide les JWT Cognito (resource server) ; rôles via **groupes Cognito** `CUSTOMER` / `ADMIN` (claim `cognito:groups`)
 - [ ] **Back-office** : gestion produits, commandes, remboursements
 - [ ] Réservation de stock à la commande, libération si paiement échoué/expiré
 
 ## Étape 4 — Paiement (PayPal, extensible)
 
-- [ ] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §4
+- [ ] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
 - [ ] Modèle `Payment` / `PaymentAttempt` persisté, indépendant du fournisseur
 - [ ] Adapter **PayPal** (API Orders v2) : `create order` → approbation client → `capture`
 - [ ] Authentification OAuth2 client credentials PayPal avec cache du token
@@ -93,36 +103,52 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
   - [ ] Sécurité : **CodeQL**, scan des dépendances (Trivy / OWASP), scan des secrets
   - [ ] Build de l'image OCI (`spring-boot:build-image` ou Jib) + scan Trivy de l'image
 - [ ] Cache Maven, exécution parallèle des jobs
+- [ ] Workflow `frontend-ci.yml` sur PR touchant `frontend/` : lint, tests, build, audit des dépendances npm
 - [ ] Workflow `infra-ci.yml` sur PR touchant `infra/` : `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`, `tofu plan` commenté dans la PR
 
 ## Étape 7 — Infrastructure (OpenTofu)
 
-- [ ] Backend d'état distant avec verrouillage + **chiffrement de l'état** (fonctionnalité native OpenTofu)
-- [ ] Authentification GitHub → cloud par **OIDC** (aucune clé statique en secret)
-- [ ] Modules : réseau, base de données managée (PostgreSQL), cache (Redis), registre d'images, runtime (Kubernetes ou conteneurs managés), DNS/TLS, secrets manager, stack d'observabilité
+- [ ] Bootstrap (une fois, à la main) : bucket S3 d'état (versionné, chiffré KMS) + clé KMS de chiffrement d'état
+- [ ] Backend S3 avec verrouillage natif (`use_lockfile = true`) + **chiffrement de l'état** OpenTofu via KMS
+- [ ] Comptes AWS séparés `staging` / `production` (AWS Organizations) — recommandé
+- [ ] Fournisseur OIDC GitHub dans IAM + un rôle IAM par environnement (plan en lecture seule / apply), restreint au repo et à l'environnement
+- [ ] Modules AWS :
+  - [ ] `network` : VPC, sous-réseaux publics/privés sur 2–3 AZ, NAT, VPC endpoints (ECR, S3, Secrets Manager)
+  - [ ] `database` : RDS PostgreSQL Multi-AZ (prod), backups automatiques, chiffrement KMS
+  - [ ] `cache` : ElastiCache (Valkey/Redis)
+  - [ ] `registry` : ECR (scan à l'envoi, tags immuables)
+  - [ ] `backend` : ECS Fargate + ALB + autoscaling
+  - [ ] `identity` : Cognito User Pool, groupes `CUSTOMER`/`ADMIN`, client SPA, domaine Managed Login
+  - [ ] `frontend` : bucket S3 privé + CloudFront (OAC) + ACM
+  - [ ] `edge` : Route 53, certificats ACM, AWS WAF
+  - [ ] `secrets` : Secrets Manager (PayPal, BDD)
+  - [ ] `observability` : Amazon Managed Prometheus + Amazon Managed Grafana, CloudWatch Logs, X-Ray/ADOT
 - [ ] Un répertoire par environnement (`envs/staging`, `envs/production`) réutilisant les modules
 - [ ] Versions de providers épinglées + `.terraform.lock.hcl` committé
-- [ ] Gestion des secrets PayPal (client id/secret, webhook id) dans le secrets manager, injectés à l'exécution
+- [ ] Secrets PayPal (client id/secret, webhook id) dans Secrets Manager, injectés dans la tâche ECS
 
 ## Étape 8 — CD
 
 - [ ] Workflow `cd.yml` sur merge dans `main` :
   - [ ] Publication de l'image taguée par SHA + version, **signature cosign** + **SBOM**
-  - [ ] `tofu apply` staging → déploiement staging
+  - [ ] Push de l'image dans ECR, `tofu apply` staging → nouvelle révision de tâche ECS
+  - [ ] SPA : build → sync S3 → invalidation CloudFront
   - [ ] Migrations Flyway automatiques au démarrage (ou job dédié)
   - [ ] Smoke tests + tests E2E (Playwright) sur staging, paiement PayPal Sandbox inclus
   - [ ] Approbation manuelle (environnement GitHub `production`) → déploiement prod
-- [ ] Stratégie de déploiement sans interruption (rolling ou blue/green / canary)
-- [ ] Rollback automatique si healthcheck ou alertes post-déploiement en échec
+- [ ] Déploiement sans interruption : rolling ECS avec **deployment circuit breaker** (ou blue/green via CodeDeploy)
+- [ ] Rollback automatique si healthcheck ou alarmes CloudWatch post-déploiement en échec
 - [ ] Release automatique (tag + changelog) via release-please ou semantic-release
 
 ## Étape 9 — Sécurité & conformité
 
 - [ ] Aucune donnée carte stockée (PayPal gère la conformité **PCI-DSS**)
 - [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention
-- [ ] Headers de sécurité (CSP, HSTS), CSRF, rate limiting sur login/paiement
+- [ ] Headers de sécurité (CSP, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
+- [ ] Jetons stockés côté SPA en mémoire (pas de `localStorage`), refresh token rotatif
 - [ ] Revue OWASP Top 10, test de pénétration avant mise en prod
-- [ ] Sauvegardes BDD automatiques + test de restauration
+- [ ] Sauvegardes RDS automatiques + test de restauration
+- [ ] AWS Budgets + alertes de coût, GuardDuty, CloudTrail
 
 ## Étape 10 — Mise en production & après
 
