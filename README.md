@@ -24,15 +24,33 @@ ecom/
 
 - Java 25 (Temurin)
 - Docker (Testcontainers, Docker Compose local)
-- Node.js LTS (frontend)
+- Node.js 24 LTS (frontend)
 - OpenTofu ≥ 1.10
 
 ## Démarrer
 
+Backend (PostgreSQL, Valkey, Prometheus et Grafana sont démarrés automatiquement via `compose.yaml`) :
+
 ```bash
-./mvnw verify            # build + tests
-./mvnw spring-boot:run   # lancer le backend
+./mvnw verify                                             # build + tests (Docker requis pour Testcontainers)
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local   # lancer le backend
 ```
+
+Frontend :
+
+```bash
+cd frontend
+npm ci
+npm start                # http://localhost:4200, /api proxifié vers le backend
+npm test && npm run lint
+```
+
+| URL locale                              | Service                          |
+|-----------------------------------------|----------------------------------|
+| http://localhost:8080/api/swagger-ui    | Documentation de l'API           |
+| http://localhost:8081/actuator/health   | Santé (port de management)       |
+| http://localhost:9090                   | Prometheus                       |
+| http://localhost:3000                   | Grafana (`GRAFANA_PORT` pour changer le port) |
 
 ## Contribuer
 

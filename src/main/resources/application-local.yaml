@@ -1,0 +1,14 @@
+# Profil de développement local : PostgreSQL et Valkey démarrés automatiquement via compose.yaml
+spring:
+  docker:
+    compose:
+      lifecycle-management: start-only
+
+ecom:
+  cors:
+    allowed-origins:
+      - http://localhost:4200
+
+logging:
+  level:
+    org.ecom: debug

@@ -229,9 +229,9 @@ org.ecom
 | `@angular/*` (dernière version stable)  | Framework (standalone components, signals, routing lazy)   |
 | `angular-auth-oidc-client`              | OIDC Authorization Code + PKCE avec Cognito, refresh token |
 | `@paypal/paypal-js`                     | Chargement du PayPal JS SDK (boutons PayPal)               |
-| `@openapitools/openapi-generator-cli` *(dev)* | Génération du client API typé depuis l'OpenAPI backend |
+| `ng-openapi-gen` *(dev)*                | Génération des services Angular typés depuis l'OpenAPI backend (pur Node, pas de JVM requise) |
 | `angular-eslint` + `eslint` *(dev)*     | Lint                                                       |
-| Vitest *(dev, runner par défaut des versions récentes d'Angular)* | Tests unitaires                  |
+| `vitest` + `jsdom` *(dev)*              | Tests unitaires (runner par défaut d'Angular)              |
 | `@playwright/test` *(dev)*              | Tests E2E (exécutés en CD contre staging)                  |
 
 Organisation : `core/` (auth, interceptors, config), `features/{catalog,cart,checkout,account,admin}/` en lazy loading, `shared/`, `api/` (client généré, non édité à la main).

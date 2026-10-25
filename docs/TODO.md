@@ -49,17 +49,19 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 2 — Socle applicatif
 
-- [ ] Ajouter les dépendances de base (web, JPA, validation, Flyway, PostgreSQL, actuator) — cf. doc technique
-- [ ] `compose.yaml` local : PostgreSQL, Redis, Prometheus, Grafana, Tempo/Jaeger
-- [ ] Profils Spring : `local`, `test`, `staging`, `prod` ; config externalisée (variables d'env, pas de secrets dans le repo)
-- [ ] Gestion d'erreurs globale (`ProblemDetail` RFC 9457)
-- [ ] Configuration CORS pour le domaine de la SPA
-- [ ] Initialiser le projet Angular dans `frontend/` (`ng new`, standalone components, angular-eslint, tests unitaires)
-- [ ] Client API Angular généré depuis l'OpenAPI du backend (`openapi-generator`, générateur `typescript-angular`)
-- [ ] Proxy de dev Angular (`proxy.conf.json`) : `/api` → `localhost:8080`
-- [ ] Documentation API OpenAPI (springdoc)
-- [ ] Healthchecks liveness/readiness (actuator probes)
-- [ ] Tests d'intégration avec **Testcontainers**
+- [x] Dépendances de base (webmvc, validation, JPA, Flyway, PostgreSQL, actuator, Prometheus, springdoc) — cf. doc technique
+- [x] `compose.yaml` local : PostgreSQL 18, Valkey 9, Prometheus, Grafana (provisionné) — démarré automatiquement avec le profil `local`
+- [ ] Ajouter Tempo au `compose.yaml` (étape 5, avec OpenTelemetry)
+- [x] Profils Spring `local`, `staging`, `prod` ; config externalisée (variables d'env, pas de secrets dans le repo) — les tests utilisent Testcontainers sans profil dédié
+- [x] Gestion d'erreurs globale (`ProblemDetail` RFC 9457), sans fuite de détails internes sur les 500
+- [x] Configuration CORS (`ecom.cors.allowed-origins`, `localhost:4200` en local)
+- [x] Projet Angular 22 dans `frontend/` (standalone, angular-eslint, Vitest, Node 24 en CI, scripts d'installation natifs refusés)
+- [x] Génération du client API configurée (`npm run generate:api`, ng-openapi-gen) — à lancer quand les premiers endpoints existeront (étape 3)
+- [x] Proxy de dev Angular (`proxy.conf.json`) : `/api` → `localhost:8080`
+- [x] Documentation API OpenAPI (springdoc) : `/api/openapi`, `/api/swagger-ui` — désactivée en prod
+- [x] Healthchecks liveness/readiness sur le port de management `8081`, non exposé sur le port applicatif
+- [x] Tests d'intégration avec **Testcontainers** (`*IT`, failsafe) + `TestEcomApplication` pour lancer l'app sur Testcontainers
+- [x] Job CI frontend (audit, lint, tests, build) ajouté à `ci.yml` ; Dependabot npm et docker-compose activés
 
 ## Étape 3 — Domaine métier
 
