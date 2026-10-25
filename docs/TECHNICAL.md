@@ -279,7 +279,7 @@ SecurityFilterChain api(HttpSecurity http) throws Exception {
                     .anyRequest().authenticated())
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
                     .jwtAuthenticationConverter(cognitoGroupsConverter())))
-            .csrf(AbstractHttpConfigurer::disable)   // API stateless par Bearer token
+            .csrf(CsrfConfigurer::spa)   // cookie XSRF-TOKEN + en-tête X-XSRF-TOKEN, géré nativement par Angular
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .build();
 }
@@ -296,6 +296,8 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 ```
 
 + un `OAuth2TokenValidator<Jwt>` qui vérifie `token_use == "access"` et `client_id == ecom.security.cognito-client-id`.
+
+**CSRF** : mode SPA de Spring Security (double-submit cookie). Le serveur pose le cookie `XSRF-TOKEN`, le `HttpClient` d'Angular le renvoie dans l'en-tête `X-XSRF-TOKEN` sur les requêtes même origine. Les requêtes authentifiées par bearer token en sont exemptées par Spring Security (le jeton n'est pas envoyé automatiquement par le navigateur) ; les requêtes anonymes qui modifient l'état (panier invité) exigent le jeton. Les webhooks PayPal (étape 4) devront être explicitement exclus, leur authenticité étant vérifiée par signature.
 
 ---
 
