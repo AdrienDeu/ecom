@@ -34,7 +34,6 @@ class SecurityConfig {
         return http
                 .securityMatcher(EndpointRequest.toAnyEndpoint())
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
-                .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
     }
@@ -53,7 +52,9 @@ class SecurityConfig {
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .cors(Customizer.withDefaults())
-                // Stateless API authenticated by bearer tokens: no session, no cookie, so no CSRF exposure
+                // CSRF protection is not needed: the API has no session and no cookie. Credentials travel in the
+                // Authorization and X-Cart-Id headers, which a third-party site cannot make the browser send
+                // without passing the CORS preflight.
                 .csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
