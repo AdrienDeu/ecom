@@ -23,18 +23,23 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 1 — Fondations du repo GitHub
 
-- [ ] `git init` + push sur GitHub, branche par défaut `main`
+- [x] Repo GitHub `AdrienDeu/ecom`, branches `main` (prod) et `dev` (intégration)
 - [ ] Protection de `main` : PR obligatoire, 1 review min., checks CI requis, historique linéaire
-- [ ] `CODEOWNERS`, templates d'issues et de PR
-- [ ] Convention de commits (Conventional Commits) + versioning sémantique
-- [ ] Activer **Dependabot** (Maven, GitHub Actions, OpenTofu, Docker) et **secret scanning / push protection**
+- [x] `CODEOWNERS`, templates d'issues et de PR, `.editorconfig`, README
+- [x] Convention de commits (Conventional Commits) — documentée dans le README
+- [ ] Versioning sémantique automatisé (release-please, étape 8)
+- [x] Dependabot configuré (Maven, GitHub Actions ; npm et OpenTofu à décommenter plus tard)
+- [ ] Activer **secret scanning / push protection** et les alertes Dependabot dans les réglages du repo
+- [x] Workflows `ci.yml` (build + tests Java 25) et `codeql.yml` (Java + Actions), actions épinglées par SHA
+- [x] ADR `docs/adr/0001-socle-technique.md`
 - [ ] Créer les environnements GitHub : `staging`, `production` (avec reviewers obligatoires pour prod)
-- [ ] Structure du repo :
+- [x] Structure du repo :
   ```
   ecom/
   ├── src/                    # backend Spring Boot (API REST)
   ├── frontend/               # SPA
   ├── infra/                  # OpenTofu (AWS)
+  │   ├── bootstrap/
   │   ├── modules/
   │   └── envs/{staging,production}/
   ├── observability/          # dashboards Grafana, règles d'alerte

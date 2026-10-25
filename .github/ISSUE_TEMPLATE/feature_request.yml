@@ -1,0 +1,29 @@
+name: Fonctionnalité
+description: Proposer une nouvelle fonctionnalité ou une amélioration
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: Besoin
+      description: Quel problème cela résout-il, et pour qui ?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposition
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Critères d'acceptation
+      placeholder: |
+        - [ ] ...
+  - type: dropdown
+    id: area
+    attributes:
+      label: Zone
+      multiple: true
+      options: [Backend, Frontend, Paiement, Infra, CI/CD, Observabilité]
