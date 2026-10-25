@@ -81,13 +81,18 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ### 3b — Frontend Angular
 
-- [ ] Authentification Cognito (`angular-auth-oidc-client`, Authorization Code + PKCE), interceptor `/api/**`, guards
-- [ ] Catalogue : liste, recherche, filtre catégorie, fiche produit
-- [ ] Panier invité + fusion à la connexion
-- [ ] Compte : adresses, historique et détail des commandes
-- [ ] Checkout jusqu'à la création de commande (le paiement arrive à l'étape 4)
-- [ ] Back-office : produits, stock, commandes
-- [ ] Client API généré (`npm run generate:api`)
+- [x] Authentification OIDC (`angular-auth-oidc-client`, Authorization Code + PKCE, refresh token), jeton limité à `/api/**`, guards, retour à la page demandée
+- [x] Configuration runtime `/config.json` (même build promu de staging à prod)
+- [x] Catalogue : liste, recherche, filtre catégorie, pagination, fiche produit
+- [x] Panier invité + fusion à la connexion
+- [x] Compte : adresses, historique et détail des commandes, annulation
+- [x] Checkout jusqu'à la création de commande (le paiement arrive à l'étape 4)
+- [x] Back-office : produits (création, édition, désactivation), catégories, stock, commandes (expédition, livraison, annulation)
+- [x] Client API généré (`npm run generate:api`) + test de contrat OpenAPI côté backend
+- [x] Parcours complet validé dans Chromium headless (catalogue → panier invité → login → fusion → adresse → commande → back-office → mobile)
+- [ ] Tests E2E Playwright versionnés et exécutés en CD contre staging (étape 8)
+- [ ] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
+- [ ] Images produits : upload vers S3 (aujourd'hui une URL saisie à la main)
 
 ## Étape 4 — Paiement (PayPal, extensible)
 

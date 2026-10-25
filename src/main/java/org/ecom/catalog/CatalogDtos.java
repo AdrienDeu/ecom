@@ -3,6 +3,7 @@ package org.ecom.catalog;
 import java.math.BigDecimal;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Min;
@@ -29,8 +30,9 @@ public final class CatalogDtos {
 
     }
 
-    public record ProductView(UUID id, String sku, String slug, String name, String description, Money price,
-                              String imageUrl, CategoryView category, boolean inStock) {
+    public record ProductView(UUID id, String sku, String slug, String name, @Schema(nullable = true) String description,
+                              Money price, @Schema(nullable = true) String imageUrl,
+                              @Schema(nullable = true) CategoryView category, boolean inStock) {
 
         static ProductView of(Product product, int available) {
             return new ProductView(product.getId(), product.getSku(), product.getSlug(), product.getName(),
@@ -40,8 +42,10 @@ public final class CatalogDtos {
 
     }
 
-    public record AdminProductView(UUID id, String sku, String slug, String name, String description, Money price,
-                                   String imageUrl, CategoryView category, boolean active, StockLevel stock) {
+    public record AdminProductView(UUID id, String sku, String slug, String name,
+                                   @Schema(nullable = true) String description, Money price,
+                                   @Schema(nullable = true) String imageUrl, @Schema(nullable = true) CategoryView category,
+                                   boolean active, StockLevel stock) {
 
         static AdminProductView of(Product product, StockLevel stock) {
             return new AdminProductView(product.getId(), product.getSku(), product.getSlug(), product.getName(),

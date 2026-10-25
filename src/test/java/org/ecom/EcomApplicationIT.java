@@ -7,6 +7,10 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
+import java.util.Map;
+
+import com.jayway.jsonpath.JsonPath;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -56,6 +60,20 @@ class EcomApplicationIT {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("\"openapi\"");
+    }
+
+    /** The Angular client is generated from this document: ids and required properties are part of the contract. */
+    @Test
+    void openApiDocumentDescribesTheContractOfTheGeneratedClient() throws Exception {
+        var document = JsonPath.parse(get(port, "/api/openapi").body());
+
+        List<String> operationIds = document.read("$.paths.*.*.operationId");
+        assertThat(operationIds).contains("catalogProducts", "adminCatalogProducts", "orderCheckout").doesNotHaveDuplicates();
+        List<String> required = document.read("$.components.schemas.ProductView.required");
+        assertThat(required).contains("id", "name", "price", "inStock").doesNotContain("category", "description");
+        assertThat(document.<Boolean>read("$.components.schemas.ProductView.properties.description.nullable")).isTrue();
+        Map<String, Object> categoryView = document.read("$.components.schemas.CategoryView");
+        assertThat(categoryView).doesNotContainKey("nullable");
     }
 
     private HttpResponse<String> get(int port, String path) throws IOException, InterruptedException {

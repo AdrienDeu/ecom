@@ -41,8 +41,10 @@ management:
         http.server.requests: true
 
 springdoc:
+  default-produces-media-type: application/json
   api-docs:
     path: /api/openapi
+    version: openapi_3_0
   swagger-ui:
     path: /api/swagger-ui
 

@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.ecom.catalog.CatalogDtos.CategoryView;
 import org.ecom.catalog.CatalogDtos.ProductView;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -27,7 +28,7 @@ class CatalogController {
     @GetMapping("/products")
     PagedModel<ProductView> products(@RequestParam(required = false) String category,
                                      @RequestParam(required = false) String q,
-                                     @PageableDefault(size = 24, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
+                                     @ParameterObject @PageableDefault(size = 24, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
         return new PagedModel<>(catalog.search(category, q, pageable));
     }
 

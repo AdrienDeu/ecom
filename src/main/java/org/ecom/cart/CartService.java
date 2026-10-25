@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import org.ecom.cart.CartStore.StoredCart;
 import org.ecom.catalog.CatalogService;
 import org.ecom.catalog.ProductSummary;
@@ -128,7 +129,8 @@ public class CartService {
     public record CartView(List<CartLine> lines, Money total, boolean checkoutAllowed) {
     }
 
-    public record CartLine(UUID productId, String sku, String slug, String name, String imageUrl, Money unitPrice,
+    public record CartLine(UUID productId, String sku, String slug, String name, @Schema(nullable = true) String imageUrl,
+                           Money unitPrice,
                            int quantity, Money lineTotal, boolean available) {
     }
 

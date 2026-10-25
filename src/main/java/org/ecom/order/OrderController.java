@@ -5,6 +5,7 @@ import java.util.UUID;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -39,7 +40,7 @@ class OrderController {
 
     @GetMapping
     PagedModel<OrderView> myOrders(@AuthenticationPrincipal Jwt jwt,
-                                   @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+                                   @ParameterObject @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return new PagedModel<>(orders.customerOrders(jwt.getSubject(), pageable));
     }
 

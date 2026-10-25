@@ -2,6 +2,7 @@ package org.ecom.order;
 
 import java.util.UUID;
 
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -28,7 +29,7 @@ class AdminOrderController {
 
     @GetMapping
     PagedModel<OrderView> list(@RequestParam(required = false) OrderStatus status,
-                               @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+                               @ParameterObject @PageableDefault(size = 50, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
         return new PagedModel<>(orders.list(status, pageable));
     }
 

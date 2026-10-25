@@ -53,7 +53,13 @@ npm test && npm run lint
 | http://localhost:3000                   | Grafana (`GRAFANA_PORT` pour changer le port) |
 | http://localhost:9000/ecom              | Serveur OIDC de test (remplace Cognito en local) |
 
-Obtenir un jeton admin local (claims définis dans `dev/mock-oidc.json`) :
+Se connecter dans la SPA en local : la page de login du serveur OIDC de test demande un nom d'utilisateur et des claims. Pour un compte admin, saisir par exemple :
+
+```json
+{"client_id": "ecom-local", "token_use": "access", "cognito:groups": ["CUSTOMER", "ADMIN"]}
+```
+
+Obtenir un jeton admin en ligne de commande (claims définis dans `dev/mock-oidc.json`) :
 
 ```bash
 curl -s -X POST localhost:9000/ecom/token \

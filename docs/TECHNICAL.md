@@ -234,11 +234,16 @@ org.ecom
 | `vitest` + `jsdom` *(dev)*              | Tests unitaires (runner par défaut d'Angular)              |
 | `@playwright/test` *(dev)*              | Tests E2E (exécutés en CD contre staging)                  |
 
-Organisation : `core/` (auth, interceptors, config), `features/{catalog,cart,checkout,account,admin}/` en lazy loading, `shared/`, `api/` (client généré, non édité à la main).
+Organisation : `core/` (auth, panier, config, erreurs, guards), `features/{catalog,cart,checkout,account,admin,auth}/` en lazy loading, `api/` (client généré, non édité à la main, exclu du lint).
 
-- Un **interceptor HTTP** ajoute le jeton d'accès sur `/api/**` uniquement.
-- **Guards** de route : `authGuard` (compte, checkout), `adminGuard` (groupe `ADMIN`).
-- Configuration par environnement (`issuer`, `clientId`, `paypalClientId`) chargée au démarrage depuis `/config.json`, pour promouvoir le **même build** de staging à production.
+- Composants standalone, **signals** et `resource()` pour les chargements, formulaires réactifs, locale `fr-FR`.
+- L'interceptor `authInterceptor()` de la bibliothèque OIDC ajoute le jeton d'accès sur `/api/**` uniquement (`secureRoutes`).
+- **Guards** de route : `authGuard` (compte, checkout → redirection vers Cognito puis retour à la page demandée), `adminGuard` (groupe `ADMIN` ; confort d'affichage uniquement, l'API applique le contrôle).
+- Configuration par environnement chargée au démarrage depuis **`/config.json`** (`oidc.authority`, `oidc.clientId`, `oidc.scope`, `oidc.logoutUrl`) : le **même build** est promu de staging à production, seul ce fichier change (écrit au déploiement). En local il pointe vers le serveur OIDC de test.
+- **Panier invité** : l'`X-Cart-Id` renvoyé par l'API est conservé en `localStorage` ; à la connexion, la page `/auth/callback` appelle `POST /api/cart/merge` puis renvoie vers la page demandée (`triggerAuthorizationResultEvent: true` désactive la redirection automatique de la bibliothèque).
+- **Jetons** : stockés en `sessionStorage` (stockage par défaut de la bibliothèque, perdu à la fermeture de l'onglet), jamais en `localStorage` ; renouvellement par refresh token. L'URL de retour après login n'accepte que des chemins internes (pas d'open redirect).
+- **Déconnexion Cognito** : Cognito ne publie pas d'`end_session_endpoint` ; `oidc.logoutUrl` (`https://<domaine>.auth.eu-west-3.amazoncognito.com/logout?client_id=…&logout_uri=…`) est utilisé après une déconnexion locale.
+- **Client API** : `npm run generate:api` régénère `src/app/api` depuis `http://localhost:8080/api/openapi` (backend lancé). Le backend garantit des `operationId` uniques (`<controller><Méthode>`) et marque les propriétés de réponse non nulles comme `required` ; un test d'intégration protège ce contrat.
 
 ### 3.2 Cognito
 

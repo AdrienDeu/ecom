@@ -71,6 +71,19 @@ class CatalogIT extends ApiTestSupport {
     }
 
     @Test
+    void backOfficeListsInactiveProductsWithStock() throws Exception {
+        var id = createProduct("10", 4);
+        mvc.perform(delete("/api/admin/products/{id}", id).with(admin()));
+        var created = mvc.perform(get("/api/admin/products/{id}", id).with(admin())).andReturn();
+        String name = read(created, "$.name");
+
+        mvc.perform(get("/api/admin/products").param("q", name).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].active").value(false))
+                .andExpect(jsonPath("$.content[0].stock.onHand").value(4));
+    }
+
+    @Test
     void stockCannotGoBelowReservedQuantity() throws Exception {
         var productId = createProduct("10", 5);
         var customer = unique("alice");

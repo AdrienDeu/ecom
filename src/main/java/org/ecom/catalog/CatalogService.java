@@ -111,6 +111,17 @@ public class CatalogService {
         return AdminProductView.of(product, inventory.setOnHand(id, onHand));
     }
 
+    /** All products, active or not, with their stock level. */
+    @Transactional(readOnly = true)
+    public Page<AdminProductView> adminSearch(String text, Pageable pageable) {
+        Specification<Product> criteria = StringUtils.hasText(text)
+                ? ProductRepository.nameContains(text.strip())
+                : Specification.unrestricted();
+        var page = products.findAll(criteria, pageable);
+        var stock = inventory.levels(page.map(Product::getId).getContent());
+        return page.map(product -> AdminProductView.of(product, stock.get(product.getId())));
+    }
+
     @Transactional(readOnly = true)
     public AdminProductView adminProduct(UUID id) {
         return AdminProductView.of(product(id), inventory.level(id));

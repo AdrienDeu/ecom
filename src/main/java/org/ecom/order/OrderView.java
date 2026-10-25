@@ -4,11 +4,13 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import org.ecom.customer.PostalAddress;
 import org.ecom.shared.domain.Money;
 
 public record OrderView(UUID id, String reference, OrderStatus status, Money total, PostalAddress shippingAddress,
-                        List<Line> lines, Instant createdAt, Instant expiresAt) {
+                        List<Line> lines, Instant createdAt,
+                        @Schema(nullable = true, description = "Unpaid orders are cancelled after this instant") Instant expiresAt) {
 
     static OrderView of(CustomerOrder order) {
         var lines = order.getLines().stream()

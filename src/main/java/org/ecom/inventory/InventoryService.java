@@ -43,6 +43,12 @@ public class InventoryService {
     }
 
     @Transactional(readOnly = true)
+    public Map<UUID, StockLevel> levels(Collection<UUID> productIds) {
+        return stocks.findByProductIdIn(productIds).stream()
+                .collect(Collectors.toMap(Stock::getProductId, StockLevel::of));
+    }
+
+    @Transactional(readOnly = true)
     public StockLevel level(UUID productId) {
         return stocks.findById(productId).map(StockLevel::of)
                 .orElseThrow(() -> new ResourceNotFoundException("Stock", productId));
