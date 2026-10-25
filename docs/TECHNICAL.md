@@ -296,10 +296,42 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 
 ## 4. Persistance
 
-- Schéma géré **uniquement** par Flyway (`spring.jpa.hibernate.ddl-auto=validate`) — scripts dans `src/main/resources/db/migration/V1__init.sql`, etc.
-- Montants stockés en `NUMERIC(19,4)` + code devise ISO 4217 (jamais de `double`).
-- Verrouillage optimiste (`@Version`) sur `Order`, `Payment`, `Stock`.
-- Tables principales : `product`, `category`, `stock`, `customer`, `address`, `cart`, `cart_item`, `customer_order`, `order_line`, `payment`, `payment_attempt`, `webhook_event`.
+- Schéma géré **uniquement** par Flyway (`spring.jpa.hibernate.ddl-auto=validate`) — scripts dans `src/main/resources/db/migration/`. Une migration déjà mergée n'est jamais modifiée.
+- Montants : `Money` (record embarqué) stocké en `NUMERIC(19,4)` + code devise ISO 4217, arrondi au centime (`HALF_EVEN`) ; jamais de `double`.
+- Identifiants UUID v7 (triables dans le temps, générés par Hibernate).
+- Verrouillage optimiste (`@Version`) sur `product`, `stock`, `customer_order` ; un conflit renvoie `409 CONCURRENT_MODIFICATION`.
+- Les clients sont identifiés par le `sub` Cognito (`customer_id`) : pas de table client, les identités vivent dans Cognito.
+- Les paniers ne sont pas en base : JSON dans Valkey/Redis (`cart:guest:<uuid>`, `cart:customer:<sub>`), TTL 30 jours.
+
+| Migration | Tables |
+|-----------|--------|
+| `V1__catalog_and_inventory.sql` | `category`, `product`, `stock` (`on_hand`, `reserved`, contrainte `reserved <= on_hand`) |
+| `V2__customer_address.sql` | `address` |
+| `V3__orders.sql` | `customer_order` (statut, total, adresse figée, `expires_at`), `order_line` (snapshot sku/nom/prix) |
+
+### 4.1 Stock et réservations
+
+- `available = on_hand - reserved`.
+- **Checkout** : chaque ligne fait un `UPDATE stock SET reserved = reserved + q WHERE on_hand - reserved >= q` ; 0 ligne modifiée → `409 INSUFFICIENT_STOCK` et rollback de toute la commande. Le verrou de ligne PostgreSQL rend la survente impossible, sans verrou applicatif.
+- **Paiement** (`PAID`) : `on_hand -= q`, `reserved -= q`.
+- **Annulation / expiration** : `reserved -= q`. Le job `OrderExpiryJob` (chaque minute) annule les commandes non payées après `ecom.order.reservation-ttl` (30 min) ; `FOR UPDATE SKIP LOCKED` permet de le faire tourner sur plusieurs tâches ECS sans double traitement.
+
+### 4.2 API REST
+
+| Méthode & chemin | Accès | Rôle |
+|---|---|---|
+| `GET /api/catalog/products?category=&q=&page=&size=&sort=` | public | Liste paginée des produits actifs |
+| `GET /api/catalog/products/{slug}` | public | Fiche produit |
+| `GET /api/catalog/categories` | public | Catégories |
+| `GET\|POST /api/cart`, `/api/cart/items[/{productId}]` | public (`X-Cart-Id`) ou client | Panier |
+| `POST /api/cart/merge` | client | Fusion du panier invité (`X-Cart-Id`) |
+| `GET\|POST\|PUT\|DELETE /api/me/addresses[/{id}]` | client | Adresses |
+| `POST /api/orders` | client | Checkout du panier (`{addressId}`) |
+| `GET /api/orders[/{id}]`, `POST /api/orders/{id}/cancel` | client | Commandes du client |
+| `/api/admin/categories`, `/api/admin/products[/{id}[/stock]]` | `ADMIN` | Back-office catalogue et stock |
+| `GET /api/admin/orders?status=`, `POST /api/admin/orders/{id}/{ship\|deliver\|cancel}` | `ADMIN` | Back-office commandes |
+
+Erreurs : `ProblemDetail` ; les erreurs métier (409) portent un champ `code` stable (`INSUFFICIENT_STOCK`, `EMPTY_CART`, `INVALID_STATUS_TRANSITION`, `QUANTITY_TOO_HIGH`…) que la SPA peut traduire. Les ressources d'un autre client renvoient 404 (et non 403) pour ne pas révéler leur existence.
 
 ---
 

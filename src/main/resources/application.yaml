@@ -8,6 +8,12 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate.default_batch_fetch_size: 50
+  data:
+    web:
+      pageable:
+        max-page-size: 100
   mvc:
     problemdetails:
       enabled: true
@@ -43,3 +49,13 @@ springdoc:
 ecom:
   cors:
     allowed-origins: []
+  security:
+    # Fournis par variables d'environnement en staging/prod : ECOM_SECURITY_ISSUER_URI, ECOM_SECURITY_CLIENT_ID
+    issuer-uri: ${ECOM_SECURITY_ISSUER_URI:}
+    client-id: ${ECOM_SECURITY_CLIENT_ID:}
+  cart:
+    ttl: P30D
+  order:
+    reservation-ttl: PT30M
+    expiry-job:
+      interval: PT1M

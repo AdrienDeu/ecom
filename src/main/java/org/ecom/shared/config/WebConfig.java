@@ -24,7 +24,8 @@ class WebConfig implements WebMvcConfigurer {
         registry.addMapping("/api/**")
                 .allowedOrigins(allowedOrigins.toArray(String[]::new))
                 .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE")
-                .allowedHeaders("Authorization", "Content-Type")
+                .allowedHeaders("Authorization", "Content-Type", "X-Cart-Id")
+                .exposedHeaders("X-Cart-Id", "Location")
                 .maxAge(3600);
     }
 

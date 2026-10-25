@@ -8,6 +8,10 @@ ecom:
   cors:
     allowed-origins:
       - http://localhost:4200
+  security:
+    # Serveur OIDC de test (compose.yaml) qui émet des jetons au format Cognito
+    issuer-uri: http://localhost:9000/ecom
+    client-id: ecom-local
 
 logging:
   level:

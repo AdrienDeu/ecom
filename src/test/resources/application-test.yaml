@@ -1,0 +1,8 @@
+ecom:
+  security:
+    # Jamais contacté : les tests injectent les jetons via SecurityMockMvcRequestPostProcessors.jwt()
+    issuer-uri: http://localhost:1/test-issuer
+    client-id: ecom-test
+  order:
+    expiry-job:
+      enabled: false

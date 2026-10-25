@@ -29,7 +29,7 @@ ecom/
 
 ## Démarrer
 
-Backend (PostgreSQL, Valkey, Prometheus et Grafana sont démarrés automatiquement via `compose.yaml`) :
+Backend (PostgreSQL, Valkey, Prometheus, Grafana et le serveur OIDC de test sont démarrés automatiquement via `compose.yaml`) :
 
 ```bash
 ./mvnw verify                                             # build + tests (Docker requis pour Testcontainers)
@@ -51,6 +51,14 @@ npm test && npm run lint
 | http://localhost:8081/actuator/health   | Santé (port de management)       |
 | http://localhost:9090                   | Prometheus                       |
 | http://localhost:3000                   | Grafana (`GRAFANA_PORT` pour changer le port) |
+| http://localhost:9000/ecom              | Serveur OIDC de test (remplace Cognito en local) |
+
+Obtenir un jeton admin local (claims définis dans `dev/mock-oidc.json`) :
+
+```bash
+curl -s -X POST localhost:9000/ecom/token \
+  -d 'grant_type=client_credentials&client_id=ecom-local&client_secret=x&scope=openid' | jq -r .access_token
+```
 
 ## Contribuer
 

@@ -13,8 +13,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.ActiveProfiles;
 
 @Import(TestcontainersConfiguration.class)
+@ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "management.server.port=0")
 class EcomApplicationIT {
 
@@ -44,7 +46,8 @@ class EcomApplicationIT {
 
     @Test
     void actuatorIsNotExposedOnApplicationPort() throws Exception {
-        assertThat(get(port, "/actuator/health").statusCode()).isEqualTo(404);
+        assertThat(get(port, "/actuator/health").statusCode()).isIn(401, 404);
+        assertThat(get(port, "/actuator/prometheus").statusCode()).isIn(401, 404);
     }
 
     @Test

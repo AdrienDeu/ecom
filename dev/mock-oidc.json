@@ -1,0 +1,21 @@
+{
+  "interactiveLogin": true,
+  "tokenCallbacks": [
+    {
+      "issuerId": "ecom",
+      "tokenExpiry": 3600,
+      "requestMappings": [
+        {
+          "requestParam": "grant_type",
+          "match": "*",
+          "claims": {
+            "sub": "local-admin",
+            "client_id": "ecom-local",
+            "token_use": "access",
+            "cognito:groups": ["CUSTOMER", "ADMIN"]
+          }
+        }
+      ]
+    }
+  ]
+}

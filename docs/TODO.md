@@ -65,13 +65,29 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 3 — Domaine métier
 
-- [ ] **Catalogue** : produits, catégories, prix, stock, images, recherche/pagination
-- [ ] **Panier** : panier invité (identifié par un token, stocké dans Redis) + fusion à la connexion
-- [ ] **Commande** : machine à états (`CREATED → PAYMENT_PENDING → PAID → SHIPPED → DELIVERED`, `CANCELLED`, `REFUNDED`)
-- [ ] **Clients** : inscription, adresses, historique de commandes
-- [ ] **Sécurité** : Cognito User Pool + client public SPA (Authorization Code + PKCE, Hosted UI / Managed Login) ; Angular via `angular-auth-oidc-client` ; le backend valide les JWT Cognito (resource server) ; rôles via **groupes Cognito** `CUSTOMER` / `ADMIN` (claim `cognito:groups`)
-- [ ] **Back-office** : gestion produits, commandes, remboursements
-- [ ] Réservation de stock à la commande, libération si paiement échoué/expiré
+### 3a — Backend
+
+- [x] **Catalogue** : produits, catégories, prix (`Money`), images (URL), recherche plein texte simple + filtre catégorie + pagination
+- [x] **Panier** : panier invité (`X-Cart-Id`, Valkey/Redis, TTL 30 j) + fusion à la connexion, prix toujours relus du catalogue
+- [x] **Commande** : machine à états (`CREATED → PAYMENT_PENDING → PAID → SHIPPED → DELIVERED`, `CANCELLED`, `REFUNDED`), prix et adresse figés au checkout
+- [x] **Clients** : adresses (`/api/me/addresses`), historique de commandes — l'inscription est gérée par Cognito
+- [x] **Sécurité backend** : validation des JWT Cognito (issuer, signature, `token_use=access`, `client_id`), groupes `cognito:groups` → rôles ; actuator ouvert sur le port de management uniquement
+- [x] Serveur OIDC de test (`mock-oauth2-server`) dans `compose.yaml` pour développer sans Cognito
+- [x] **Back-office API** : produits, catégories, stock, commandes (expédition, livraison, annulation)
+- [x] Réservation de stock atomique au checkout (pas de survente, testé en concurrence), libération à l'annulation et à l'expiration (job `SKIP LOCKED`, multi-instances)
+- [ ] Remboursements (étape 4, via le module paiement)
+- [ ] Clé d'idempotence sur `POST /api/orders` (double-clic → une seule commande)
+- [ ] Cache du catalogue (`@Cacheable`) si les tests de charge le justifient
+
+### 3b — Frontend Angular
+
+- [ ] Authentification Cognito (`angular-auth-oidc-client`, Authorization Code + PKCE), interceptor `/api/**`, guards
+- [ ] Catalogue : liste, recherche, filtre catégorie, fiche produit
+- [ ] Panier invité + fusion à la connexion
+- [ ] Compte : adresses, historique et détail des commandes
+- [ ] Checkout jusqu'à la création de commande (le paiement arrive à l'étape 4)
+- [ ] Back-office : produits, stock, commandes
+- [ ] Client API généré (`npm run generate:api`)
 
 ## Étape 4 — Paiement (PayPal, extensible)
 
