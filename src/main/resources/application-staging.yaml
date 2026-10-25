@@ -1,0 +1,7 @@
+# Datasource et origines CORS fournies par variables d'environnement (tâche ECS) :
+#   SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
+#   ECOM_CORS_ALLOWED_ORIGINS
+logging:
+  structured:
+    format:
+      console: ecs
