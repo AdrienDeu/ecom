@@ -32,7 +32,8 @@ ecom/
 Backend (PostgreSQL, Valkey, Prometheus, Grafana et le serveur OIDC de test sont démarrés automatiquement via `compose.yaml`) :
 
 ```bash
-./mvnw verify                                             # build + tests (Docker requis pour Testcontainers)
+./mvnw verify                                             # build, tests, Spotless, SpotBugs, couverture (Docker requis pour Testcontainers)
+./mvnw spotless:apply                                     # corriger l'ordre des imports et les espaces
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local   # lancer le backend
 ```
 

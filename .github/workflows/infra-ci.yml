@@ -1,0 +1,81 @@
+name: Infra CI
+
+# Seulement quand l'infrastructure change : ce workflow n'est pas un check obligatoire des rulesets,
+# il serait sinon en attente sur les PR qui ne touchent pas infra/.
+on:
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/infra-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TOFU_VERSION: 1.13.1
+  TFLINT_VERSION: v0.64.0
+  TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+
+jobs:
+  validate:
+    name: Infra (fmt, validate, lint, scan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - uses: terraform-linters/setup-tflint@1cf010d3c7aef302051ccdb68c14c5dc2efa34ef # v6.3.1
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
+      - name: tofu fmt
+        run: tofu fmt -check -recursive -diff infra
+
+      # Chaque répertoire racine (bootstrap, envs/*) et chaque module, sans backend ni accès AWS
+      - name: tofu validate
+        run: |
+          status=0
+          for dir in $(find infra -name '*.tf' -exec dirname {} \; | sort -u); do
+            echo "::group::$dir"
+            tofu -chdir="$dir" init -backend=false -input=false >/dev/null && tofu -chdir="$dir" validate || status=1
+            echo "::endgroup::"
+          done
+          exit $status
+
+      - name: tflint
+        run: |
+          tflint --init
+          tflint --recursive --chdir=infra --format compact
+
+      - name: Trivy config (SARIF)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" \
+            config --severity MEDIUM,HIGH,CRITICAL --format sarif --output trivy-infra.sarif infra
+
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: always() && hashFiles('trivy-infra.sarif') != ''
+        with:
+          sarif_file: trivy-infra.sarif
+          category: trivy-infra
+
+      - name: Trivy config (gate)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" \
+            config --severity HIGH,CRITICAL --exit-code 1 infra
+
+      # tofu plan commenté dans la PR : ajouté à l'étape 7, avec le rôle IAM en lecture seule assumé par OIDC

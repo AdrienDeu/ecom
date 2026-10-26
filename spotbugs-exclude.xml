@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Faux positifs écartés pour tout le projet. Toute nouvelle exclusion doit être justifiée ici.
+-->
+<FindBugsFilter xmlns="https://github.com/spotbugs/filter/3.0.0"
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0 https://raw.githubusercontent.com/spotbugs/spotbugs/4.10.5/spotbugs/etc/findbugsfilter.xsd">
+
+    <!-- Records et DTO : les collections exposées sont immuables (Stream.toList(), List.copyOf, Map.of) ou des
+         objets du framework (HttpHeaders, propriétés Spring) que le code ne modifie pas. -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!-- Attaque par finaliseur : la finalisation est dépréciée pour suppression et aucune classe n'est sérialisée ;
+         les entités valident leurs invariants dans le constructeur, ce qui est voulu. -->
+    <Match>
+        <Bug pattern="CT_CONSTRUCTOR_THROW"/>
+    </Match>
+
+    <!-- Champs d'entités JPA écrits par l'application et lus par Hibernate (audit, déduplication), sans getter. -->
+    <Match>
+        <Bug pattern="URF_UNREAD_FIELD"/>
+        <Or>
+            <Class name="org.ecom.payment.Payment"/>
+            <Class name="org.ecom.payment.PaymentAttempt"/>
+            <Class name="org.ecom.payment.WebhookEvent"/>
+        </Or>
+    </Match>
+
+</FindBugsFilter>

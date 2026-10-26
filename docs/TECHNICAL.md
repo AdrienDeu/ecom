@@ -563,51 +563,38 @@ Dashboards Grafana versionnés dans `observability/grafana/dashboards/` et provi
 
 ### 7.1 Workflows
 
-| Fichier                 | Déclencheur                    | Contenu                                                                                     |
-|-------------------------|--------------------------------|---------------------------------------------------------------------------------------------|
-| `ci.yml`                | PR + push `main`               | build, tests unitaires + intégration (Testcontainers), JaCoCo, Spotless, SpotBugs, CodeQL, Trivy (deps), build image + scan |
-| `frontend-ci.yml`       | PR modifiant `frontend/**`     | `ng lint`, `ng test`, `ng build --configuration production`, `npm audit` / Trivy                                           |
-| `infra-ci.yml`          | PR modifiant `infra/**`        | `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`, `tofu plan` posté en commentaire de PR |
-| `cd.yml`                | push `main`                    | push image ECR (tag SHA) + cosign + SBOM → `tofu apply` staging → mise à jour du service ECS → SPA vers S3 + invalidation CloudFront → smoke/E2E → approbation → prod |
-| `drift.yml`             | planifié (quotidien)           | `tofu plan -detailed-exitcode` par environnement, alerte en cas de dérive                   |
+| Fichier          | Déclencheur                         | Contenu |
+|------------------|-------------------------------------|---------|
+| `ci.yml`         | PR + push `main`/`dev`              | jobs parallèles, détaillés ci-dessous |
+| `codeql.yml`     | PR + push + hebdomadaire            | CodeQL `security-extended` : Java, TypeScript, workflows GitHub Actions |
+| `infra-ci.yml`   | PR modifiant `infra/**`             | `tofu fmt -check`, `tofu validate` (sans backend), `tflint`, `trivy config` ; `tofu plan` commenté dans la PR à l'étape 7 |
+| `cd.yml`         | push `main` (étape 8)               | push image ECR (tag SHA) + cosign + SBOM → `tofu apply` staging → mise à jour du service ECS → SPA vers S3 + invalidation CloudFront → smoke/E2E → approbation → prod |
+| `drift.yml`      | planifié (quotidien, étape 8)       | `tofu plan -detailed-exitcode` par environnement, alerte en cas de dérive |
+| `release.yml`    | push `main` (étape 8)               | release-please : tag SemVer + changelog |
 
-Filtrage par chemins (`paths:`) pour ne lancer que les workflows concernés dans le monorepo.
-| `release.yml`           | push `main`                    | release-please : tag SemVer + changelog                                                     |
+Jobs de `ci.yml` :
+
+| Job                                         | Contenu | Bloquant |
+|---------------------------------------------|---------|----------|
+| **Backend (build & tests)**                 | `./mvnw verify` : Spotless (imports, espaces), tests unitaires + intégration (Testcontainers, WireMock), SpotBugs + FindSecBugs, couverture JaCoCo fusionnée (seuils : 80 % des lignes, 70 % des branches), résumé de couverture dans la PR | oui (ruleset) |
+| **Frontend (lint, test, build)**            | `npm audit` (high), ESLint, Vitest, build de production | oui (ruleset) |
+| API client up to date                       | régénère le client Angular depuis l'OpenAPI écrit par `EcomApplicationIT` et échoue s'il diffère du client commité | oui |
+| Security (dependencies & secrets)           | Trivy `sbom` sur le SBOM CycloneDX généré par Maven (arbre exact des dépendances, sans requêtes vers Maven Central qui limite les runners partagés), Trivy `fs` pour npm, secrets et misconfigurations → onglet Security (SARIF) ; échec sur HIGH/CRITICAL corrigeable ou secret | oui |
+| Image OCI (build & scan)                    | `spring-boot:build-image` (Buildpacks Paketo) + Trivy `image` → SARIF ; échec sur CRITICAL corrigeable | oui |
+| Observability (alert rules & dashboards)    | `promtool check rules` + `promtool test rules`, validité des dashboards | oui |
+
+Le frontend reste dans `ci.yml` plutôt que dans un workflow filtré par chemins : un check obligatoire d'un workflow non déclenché resterait « en attente » et bloquerait les PR qui ne touchent pas `frontend/`. `infra-ci.yml` est filtré par chemins et n'est donc pas obligatoire.
+
+En local : `./mvnw verify` exécute les mêmes contrôles que le job backend ; `./mvnw spotless:apply` corrige l'ordre des imports. Les faux positifs SpotBugs sont écartés dans `spotbugs-exclude.xml`, chaque exclusion étant justifiée.
 
 ### 7.2 Bonnes pratiques
 
-- Actions tierces **épinglées par SHA** de commit (mises à jour via Dependabot).
+- Actions tierces **épinglées par SHA** de commit (mises à jour via Dependabot). Les images d'outils lancées par `docker run` (Trivy, promtool) sont épinglées par digest dans `env:` ; Dependabot ne les suit pas, elles sont mises à jour à la main.
 - `permissions:` minimales par workflow (`contents: read` par défaut, `id-token: write` seulement pour l'OIDC).
 - Authentification AWS par **OIDC** (`aws-actions/configure-aws-credentials` + `role-to-assume`) — aucune clé d'accès AWS dans les secrets GitHub. La politique de confiance du rôle restreint `token.actions.githubusercontent.com:sub` au repo **et** à l'environnement (`repo:<owner>/ecom:environment:production`).
 - Environnements GitHub `staging` / `production` avec reviewers obligatoires et secrets par environnement.
 - `concurrency:` pour empêcher deux déploiements simultanés du même environnement.
 - La même image (même digest) est promue de staging vers production — jamais reconstruite.
-
-### 7.3 Squelette `ci.yml`
-
-```yaml
-name: CI
-on:
-  pull_request:
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@<sha>
-      - uses: actions/setup-java@<sha>
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-      - run: ./mvnw -B verify          # surefire + failsafe + jacoco + spotless + spotbugs
-      - run: ./mvnw -B spring-boot:build-image -DskipTests
-```
 
 ---
 

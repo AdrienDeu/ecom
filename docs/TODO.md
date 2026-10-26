@@ -91,7 +91,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Client API généré (`npm run generate:api`) + test de contrat OpenAPI côté backend
 - [x] Parcours complet validé dans Chromium headless (catalogue → panier invité → login → fusion → adresse → commande → back-office → mobile)
 - [ ] Tests E2E Playwright versionnés et exécutés en CD contre staging (étape 8)
-- [ ] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
+- [x] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
 - [ ] Images produits : upload vers S3 (aujourd'hui une URL saisie à la main)
 
 ## Étape 4 — Paiement (PayPal, extensible)
@@ -123,19 +123,23 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Dashboards Grafana versionnés dans `observability/` (temps de réponse, trafic, taux d'échec paiement)
 - [x] Alertes : taux d'échec paiement > seuil, p95 > SLO, erreurs 5xx, webhook PayPal absent ou rejeté, fournisseur en erreur — testées avec `promtool`
 - [ ] Core Web Vitals (LCP, INP, CLS) côté navigateur — CloudWatch RUM (étape 7)
-- [ ] Exécuter `promtool check rules` / `test rules` en CI (étape 6)
+- [x] Exécuter `promtool check rules` / `test rules` en CI (étape 6)
 
 ## Étape 6 — CI (GitHub Actions)
 
-- [ ] Workflow `ci.yml` sur chaque PR :
-  - [ ] Build + tests unitaires + tests d'intégration (Testcontainers)
-  - [ ] Couverture (JaCoCo) avec seuil minimal
-  - [ ] Qualité : Checkstyle/Spotless, SpotBugs, (optionnel SonarCloud)
-  - [ ] Sécurité : **CodeQL**, scan des dépendances (Trivy / OWASP), scan des secrets
-  - [ ] Build de l'image OCI (`spring-boot:build-image` ou Jib) + scan Trivy de l'image
-- [ ] Cache Maven, exécution parallèle des jobs
-- [ ] Workflow `frontend-ci.yml` sur PR touchant `frontend/` : lint, tests, build, audit des dépendances npm
-- [ ] Workflow `infra-ci.yml` sur PR touchant `infra/` : `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`, `tofu plan` commenté dans la PR
+- [x] Workflow `ci.yml` sur chaque PR :
+  - [x] Build + tests unitaires + tests d'intégration (Testcontainers)
+  - [x] Couverture (JaCoCo, unitaires + intégration) avec seuils : 80 % des lignes, 70 % des branches
+  - [x] Qualité : Spotless (imports, espaces), SpotBugs + FindSecBugs ; SonarCloud écarté pour l'instant
+  - [x] Sécurité : **CodeQL** (Java, TypeScript, Actions), Trivy (dépendances, secrets, misconfigurations) → onglet Security
+  - [x] Build de l'image OCI (`spring-boot:build-image`) + scan Trivy de l'image
+  - [x] Client API Angular vérifié à jour par rapport à l'OpenAPI
+  - [x] Règles d'alerte Prometheus vérifiées et testées (`promtool`)
+- [x] Cache Maven et npm, exécution parallèle des jobs
+- [x] Frontend (lint, tests, build, audit npm) — dans `ci.yml` plutôt qu'un workflow filtré par chemins, pour rester un check obligatoire
+- [x] Workflow `infra-ci.yml` sur PR touchant `infra/` : `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`
+- [ ] `tofu plan` commenté dans la PR (étape 7, rôle IAM lecture seule via OIDC)
+- [ ] Ajouter les nouveaux jobs aux checks obligatoires des rulesets `main` et `dev`
 
 ## Étape 7 — Infrastructure (OpenTofu)
 
@@ -161,7 +165,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 ## Étape 8 — CD
 
 - [ ] Workflow `cd.yml` sur merge dans `main` :
-  - [ ] Publication de l'image taguée par SHA + version, **signature cosign** + **SBOM**
+  - [ ] Publication de l'image taguée par SHA + version, **signature cosign** + **SBOM** (SBOM CycloneDX déjà généré par Maven : `META-INF/sbom/application.cdx.json`)
   - [ ] Push de l'image dans ECR, `tofu apply` staging → nouvelle révision de tâche ECS
   - [ ] SPA : build → sync S3 → invalidation CloudFront
   - [ ] Migrations Flyway automatiques au démarrage (ou job dédié)

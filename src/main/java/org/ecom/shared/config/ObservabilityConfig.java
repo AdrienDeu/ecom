@@ -16,7 +16,8 @@ class ObservabilityConfig {
     ObservationPredicate ignoreInfrastructureRequests() {
         return (name, context) -> {
             if (context instanceof ServerRequestObservationContext server) {
-                return !server.getCarrier().getRequestURI().startsWith("/actuator");
+                var request = server.getCarrier();
+                return request == null || !request.getRequestURI().startsWith("/actuator");
             }
             return !(name.startsWith("spring.security.") && context.getParentObservation() == null);
         };
