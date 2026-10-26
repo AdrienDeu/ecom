@@ -94,8 +94,11 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  # Tant que le compte AWS n'est pas amorcé (variables absentes, infra/README.md), seuls les builds tournent ; la
+  # production, qui dépend de staging, est alors ignorée aussi
   staging:
     needs: [image, spa]
+    if: vars.AWS_ACCOUNT_ID_STAGING != ''
     uses: ./.github/workflows/deploy.yml
     permissions:
       contents: read
@@ -107,6 +110,7 @@ jobs:
 
   production:
     needs: [image, staging]
+    if: vars.AWS_ACCOUNT_ID_PRODUCTION != ''
     uses: ./.github/workflows/deploy.yml
     permissions:
       contents: read

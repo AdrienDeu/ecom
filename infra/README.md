@@ -56,7 +56,7 @@ Reporter ensuite les sorties dans GitHub (*Settings → Secrets and variables �
 | `AWS_PLAN_ROLE_ARN_STAGING` / `_PRODUCTION`   | dépôt                        | sortie `tofu_plan_role_arn`               |
 | `AWS_APPLY_ROLE_ARN`                          | environnement GitHub `staging` / `production` | sortie `tofu_apply_role_arn` |
 
-Tant que les variables d'un environnement sont absentes, le job *Plan* de `infra-ci.yml` est ignoré pour cet environnement.
+Tant que les variables d'un environnement sont absentes, le job *Plan* de `infra-ci.yml` est ignoré pour cet environnement, et la CD (`cd.yml`) construit l'image et la SPA sans les déployer (la production, qui suit staging, est ignorée tant que staging l'est).
 
 Le rôle *plan* (lecture seule) n'est assumable que depuis une PR ou `main` ; le rôle *apply* seulement depuis l'environnement GitHub du même nom, donc après approbation pour la production.
 
