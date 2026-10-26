@@ -139,7 +139,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Frontend (lint, tests, build, audit npm) — dans `ci.yml` plutôt qu'un workflow filtré par chemins, pour rester un check obligatoire
 - [x] Workflow `infra-ci.yml` sur PR touchant `infra/` : `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`
 - [x] `tofu plan` commenté dans la PR (job *Plan* de `infra-ci.yml`, rôle IAM lecture seule via OIDC ; ignoré tant que le compte n'est pas amorcé)
-- [ ] Ajouter les nouveaux jobs aux checks obligatoires des rulesets `main` et `dev`
+- [x] Nouveaux jobs ajoutés aux checks obligatoires des rulesets `main` et `dev` (sauf `infra-ci.yml`, filtré par chemins)
 
 ## Étape 7 — Infrastructure (OpenTofu)
 
