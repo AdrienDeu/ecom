@@ -17,6 +17,7 @@ export type { PagedModelAdminProductView } from './models/paged-model-admin-prod
 export type { PagedModelOrderView } from './models/paged-model-order-view';
 export type { PagedModelProductView } from './models/paged-model-product-view';
 export type { PageMetadata } from './models/page-metadata';
+export type { PageViewRequest } from './models/page-view-request';
 export type { PaymentMethodView } from './models/payment-method-view';
 export type { PaymentView } from './models/payment-view';
 export type { PostalAddress } from './models/postal-address';

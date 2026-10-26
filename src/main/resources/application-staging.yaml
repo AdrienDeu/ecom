@@ -2,6 +2,18 @@
 #   SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD
 #   ECOM_CORS_ALLOWED_ORIGINS
 #   PAYPAL_ENABLED, PAYPAL_BASE_URL, PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET, PAYPAL_WEBHOOK_ID (Secrets Manager)
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # Sidecar ADOT de la tâche ECS, qui relaie vers X-Ray
+          endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://localhost:4318/v1/traces}
+
+# Logs JSON (ECS, avec traceId/spanId) sur la sortie standard → CloudWatch Logs (driver awslogs)
 logging:
   structured:
     format:

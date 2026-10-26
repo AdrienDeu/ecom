@@ -33,6 +33,8 @@ export type { AdminCatalogCreateProduct$Params as AdminCatalogCreateProduct$Para
 export { adminCatalogCreateProduct as adminCatalogCreateProduct } from './fn/admin-catalog-controller/admin-catalog-create-product';
 export type { AdminCatalogCreateCategory$Params as AdminCatalogCreateCategory$Params } from './fn/admin-catalog-controller/admin-catalog-create-category';
 export { adminCatalogCreateCategory as adminCatalogCreateCategory } from './fn/admin-catalog-controller/admin-catalog-create-category';
+export type { TelemetryPageView$Params as TelemetryPageView$Params } from './fn/telemetry-controller/telemetry-page-view';
+export { telemetryPageView as telemetryPageView } from './fn/telemetry-controller/telemetry-page-view';
 export type { PaymentStart$Params as PaymentStart$Params } from './fn/payment-controller/payment-start';
 export { paymentStart as paymentStart } from './fn/payment-controller/payment-start';
 export type { PaymentCapture$Params as PaymentCapture$Params } from './fn/payment-controller/payment-capture';

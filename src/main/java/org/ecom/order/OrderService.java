@@ -5,6 +5,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.UUID;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.ecom.cart.CartItem;
 import org.ecom.cart.CartOwner;
 import org.ecom.cart.CartService;
@@ -35,10 +37,12 @@ public class OrderService {
     private final AddressService addresses;
     private final Clock clock;
     private final Duration reservationTtl;
+    private final Counter placedOrders;
+    private final Counter expiredOrders;
 
     OrderService(OrderRepository orders, CartService carts, CatalogService catalog, InventoryService inventory,
                  AddressService addresses, Clock clock,
-                 @Value("${ecom.order.reservation-ttl:PT30M}") Duration reservationTtl) {
+                 @Value("${ecom.order.reservation-ttl:PT30M}") Duration reservationTtl, MeterRegistry registry) {
         this.orders = orders;
         this.carts = carts;
         this.catalog = catalog;
@@ -46,6 +50,10 @@ public class OrderService {
         this.addresses = addresses;
         this.clock = clock;
         this.reservationTtl = reservationTtl;
+        this.placedOrders = Counter.builder("ecom.orders.placed").description("Orders placed at checkout").register(registry);
+        // Checkouts never paid: the abandonment indicator, the cart itself being only a temporary key in Valkey
+        this.expiredOrders = Counter.builder("ecom.orders.expired").description("Unpaid orders cancelled when their reservation expired")
+                .register(registry);
     }
 
     /**
@@ -74,7 +82,10 @@ public class OrderService {
 
         var order = orders.save(new CustomerOrder(OrderReferences.next(), customerId, shippingAddress, lines,
                 clock.instant().plus(reservationTtl)));
-        afterCommit(() -> carts.clear(owner));
+        afterCommit(() -> {
+            carts.clear(owner);
+            placedOrders.increment();
+        });
         log.info("Order {} created for {} lines", order.getReference(), lines.size());
         return OrderView.of(order);
     }
@@ -150,6 +161,7 @@ public class OrderService {
             transition(order, OrderStatus.CANCELLED);
             log.info("Order {} expired, stock released", order.getReference());
         }
+        afterCommit(() -> expiredOrders.increment(ids.size()));
         return ids.size();
     }
 

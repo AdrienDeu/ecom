@@ -12,6 +12,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.ecom.ApiTestSupport;
 import org.ecom.IntegrationTest;
 import org.ecom.inventory.InventoryService;
@@ -32,12 +33,16 @@ class OrderIT extends ApiTestSupport {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    MeterRegistry registry;
+
     @Test
     void checkoutFreezesPricesReservesStockAndEmptiesCart() throws Exception {
         var productId = createProduct("19.99", 5);
         var customer = unique("alice");
         var address = createAddress(customer);
         addToCart(customer, productId, 2);
+        var placed = registry.get("ecom.orders.placed").counter().count();
 
         var result = mvc.perform(json(post("/api/orders").with(customer(customer)), """
                         {"addressId": "%s"}""".formatted(address)))
@@ -52,6 +57,7 @@ class OrderIT extends ApiTestSupport {
         String orderId = read(result, "$.id");
 
         assertThat(inventory.level(productId).reserved()).isEqualTo(2);
+        assertThat(registry.get("ecom.orders.placed").counter().count()).isEqualTo(placed + 1);
         mvc.perform(get("/api/cart").with(customer(customer))).andExpect(jsonPath("$.lines").isEmpty());
         mvc.perform(get("/api/orders").with(customer(customer)))
                 .andExpect(jsonPath("$.content[0].id").value(orderId));
@@ -146,8 +152,10 @@ class OrderIT extends ApiTestSupport {
         var productId = createProduct("3", 1);
         var order = placeOrder(unique("erin"), productId, 1);
         jdbc.update("update customer_order set expires_at = now() - interval '1 minute' where id = ?", order);
+        var expired = registry.get("ecom.orders.expired").counter().count();
 
         assertThat(orders.expireStaleOrders(100)).isPositive();
+        assertThat(registry.get("ecom.orders.expired").counter().count()).isGreaterThan(expired);
 
         assertThat(orders.get(order).status()).isEqualTo(OrderStatus.CANCELLED);
         assertThat(inventory.level(productId).available()).isEqualTo(1);

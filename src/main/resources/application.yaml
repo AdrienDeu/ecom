@@ -39,6 +39,21 @@ management:
     distribution:
       percentiles-histogram:
         http.server.requests: true
+      # Buckets exacts aux seuils des SLO (p95 < 300 ms) pour des calculs de conformité précis
+      slo:
+        http.server.requests: 100ms, 300ms, 1s
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  otlp:
+    metrics:
+      export:
+        # Les métriques sont scrapées par Prometheus (/actuator/prometheus), pas poussées en OTLP
+        enabled: false
+  opentelemetry:
+    resource-attributes:
+      deployment.environment.name: ${ECOM_ENVIRONMENT:local}
+  # Export OTLP des traces (et des logs en local) : endpoints définis par profil, aucun export sinon
 
 springdoc:
   default-produces-media-type: application/json

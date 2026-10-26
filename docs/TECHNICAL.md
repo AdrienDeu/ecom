@@ -461,51 +461,60 @@ management:
     web:
       exposure:
         include: health, info, prometheus
-  endpoint:
-    health:
-      probes:
-        enabled: true
   metrics:
     distribution:
       percentiles-histogram:
         http.server.requests: true
       slo:
-        http.server.requests: 100ms, 300ms, 1s
+        http.server.requests: 100ms, 300ms, 1s   # buckets exacts aux seuils des SLO
   tracing:
     sampling:
-      probability: 0.1                 # 1.0 en staging
+      probability: 0.1                 # 1.0 en local et en staging
   otlp:
+    metrics:
+      export:
+        enabled: false                 # métriques scrapées par Prometheus, pas poussées en OTLP
+  opentelemetry:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces   # sidecar ADOT en AWS, Tempo en local
+    logging:
+      export:
+        otlp:
+          endpoint: http://localhost:3100/otlp/v1/logs # local uniquement (Loki)
 logging:
   structured:
     format:
-      console: ecs                     # logs JSON avec traceId/spanId
+      console: ecs                     # staging/prod : logs JSON avec traceId/spanId → CloudWatch
 ```
+
+- **Traces** : `spring-boot-starter-opentelemetry` (pont Micrometer Tracing → OpenTelemetry, export OTLP). Les requêtes `/actuator/**` (healthchecks, scrapes) ne produisent pas de trace (`ObservabilityConfig`).
+- **Exemplars** : chaque bucket de latence Prometheus porte un `trace_id` échantillonné ; dans Grafana, un point du graphe de latence ouvre la trace dans Tempo.
+- **Logs** : `traceId`/`spanId` dans chaque ligne (MDC). En local, l'appender Logback OpenTelemetry (`OpenTelemetryLogsConfig`, activé seulement si un endpoint OTLP de logs est défini) les envoie à Loki, où Grafana relie log ↔ trace.
+
+| URL locale (`compose.yaml`)  | Service                              |
+|------------------------------|--------------------------------------|
+| http://localhost:9090        | Prometheus (règles d'alerte chargées depuis `observability/alerts/`) |
+| http://localhost:3000        | Grafana : dashboards `ecom — API`, `ecom — Métier`, Explore Tempo/Loki |
+| http://localhost:3200        | Tempo (API)                          |
+| http://localhost:3100        | Loki (API)                           |
 
 ### 6.2 Métriques métier
 
-```java
-@Component
-public class PaymentMetrics {
+| Métrique (Prometheus)                    | Type      | Tags                                  | Source |
+|------------------------------------------|-----------|---------------------------------------|--------|
+| `ecom_page_views_total`                  | counter   | `page` (liste fermée `PageType`)      | `POST /api/telemetry/page-views` envoyé par la SPA à chaque navigation |
+| `ecom_payment_attempts_total`            | counter   | `provider`, `outcome` (`success`, `failed`, `cancelled`), `reason` | paiement arrivé à une issue définitive |
+| `ecom_payment_duration_seconds`          | histogram | `provider`, `operation` (`initiate`, `capture`, `retrieve`, `refund`), `outcome` (`succeeded`, `rejected`, `error`) | chaque appel au fournisseur |
+| `ecom_payment_webhooks_total`            | counter   | `provider`, `type`, `result` (`processed`, `duplicate`, `rejected`) | webhooks reçus |
+| `ecom_payment_refunds_total`             | counter   | `provider`                            | remboursements enregistrés |
+| `ecom_orders_placed_total`               | counter   | —                                     | checkout validé (après commit) |
+| `ecom_orders_expired_total`              | counter   | —                                     | commande non payée annulée à l'expiration de sa réservation : l'indicateur d'**abandon au paiement** (le panier lui-même n'est qu'une clé temporaire dans Valkey) |
 
-    private final MeterRegistry registry;
-
-    public PaymentMetrics(MeterRegistry registry) {
-        this.registry = registry;
-    }
-
-    public void recordAttempt(String provider, PaymentOutcome outcome, String reason) {
-        registry.counter("ecom.payment.attempts",
-                "provider", provider,
-                "outcome", outcome.name().toLowerCase(),
-                "reason", reason)          // valeurs bornées : ex. DECLINED, TIMEOUT, CANCELLED_BY_USER
-                .increment();
-    }
-}
-```
-
-> Attention à la **cardinalité** des tags : jamais d'identifiant client/commande comme tag.
+> Attention à la **cardinalité** des tags : jamais d'identifiant client/commande comme tag. Les raisons d'échec sont les codes du fournisseur (`INSTRUMENT_DECLINED`…) ; toute autre valeur devient `OTHER`. Les pages vues sont une liste fermée : une valeur inconnue est refusée (400).
+>
+> Ne pas nommer un compteur `*.created` : le client Prometheus retire ce suffixe, réservé par OpenMetrics.
 
 ### 6.3 Indicateurs demandés (PromQL)
 
@@ -514,13 +523,12 @@ public class PaymentMetrics {
 | Temps de réponse p95 par endpoint           | `histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket[5m])))`                            |
 | Requêtes par seconde par endpoint           | `sum by (uri) (rate(http_server_requests_seconds_count[1m]))`                                                           |
 | Pages vues par minute                       | `sum by (page) (rate(ecom_page_views_total[5m])) * 60`                                                                  |
+| Taux d'abandon au paiement                  | `sum(increase(ecom_orders_expired_total[1d])) / sum(increase(ecom_orders_placed_total[1d]))`                            |
 | Taux de paiements échoués                   | `sum(rate(ecom_payment_attempts_total{outcome="failed"}[15m])) / sum(rate(ecom_payment_attempts_total[15m]))`           |
 | Taux d'échec par fournisseur                | `sum by (provider) (rate(ecom_payment_attempts_total{outcome="failed"}[15m])) / sum by (provider) (rate(ecom_payment_attempts_total[15m]))` |
 | Taux d'erreurs 5xx                          | `sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count[5m]))`  |
 
-> Avec une SPA, le serveur ne voit pas les changements de page (routage côté client). Deux options :
-> - la SPA envoie un événement `POST /api/telemetry/page-view` (`{page: "product"}`, valeurs bornées) qui incrémente `ecom.page.views` → tout reste dans Prometheus/Grafana ;
-> - ou un outil d'analytics respectueux du RGPD (Matomo, Plausible).
+> Avec une SPA, le serveur ne voit pas les changements de page (routage côté client) : la SPA envoie `POST /api/telemetry/page-views` (`{"page": "PRODUCT"}`) à chaque navigation (`PageViewTracker`). Seul le type de page est transmis, jamais l'URL ni l'identité du visiteur. L'endpoint est public : un rate limiting AWS WAF le protégera de l'inflation artificielle (étape 9).
 >
 > Côté navigateur, mesurer aussi les **Core Web Vitals** (LCP, INP, CLS) — par ex. via CloudWatch RUM.
 
@@ -531,14 +539,23 @@ public class PaymentMetrics {
 - **Amazon Managed Grafana** utilise Managed Prometheus, X-Ray et CloudWatch comme sources de données.
 - Alarmes d'infrastructure (CPU ECS, connexions RDS, 5xx ALB) dans CloudWatch ; alertes métier dans Grafana/Prometheus.
 
-### 6.5 Alertes (exemples)
+### 6.5 Alertes
 
-- Taux d'échec paiement > 5 % sur 15 min → critique
-- p95 > 300 ms sur 10 min → warning
-- Taux 5xx > 1 % sur 5 min → critique
-- Aucun webhook PayPal reçu depuis 1 h alors que des paiements sont initiés → warning
+Règles Prometheus versionnées dans `observability/alerts/ecom.yml`, testées avec `promtool test rules` (`observability/alerts/tests/`) :
 
-Dashboards et règles versionnés dans `observability/` et provisionnés automatiquement.
+| Alerte                          | Condition                                                                 | Sévérité |
+|---------------------------------|---------------------------------------------------------------------------|----------|
+| `EcomDown`                      | cible de scrape injoignable depuis 1 min                                  | critique |
+| `EcomHighErrorRate`             | > 1 % de 5xx sur 5 min                                                    | critique |
+| `EcomSlowResponses`             | p95 > 300 ms pendant 10 min                                               | warning  |
+| `EcomPaymentFailureRateHigh`    | > 5 % de paiements refusés sur 15 min (au moins 10 paiements), par fournisseur | critique |
+| `EcomPaymentProviderErrors`     | appels au fournisseur en erreur (injoignable, 5xx) pendant 5 min          | critique |
+| `EcomPaymentWebhooksRejected`   | > 5 webhooks à signature invalide en 15 min                               | warning  |
+| `EcomPaymentWebhooksMissing`    | paiements initiés mais aucun webhook depuis 1 h                           | warning  |
+
+En local, Prometheus évalue les règles (onglet *Alerts*) sans Alertmanager. En AWS, elles sont chargées dans Amazon Managed Prometheus, qui notifie via SNS (étape 7).
+
+Dashboards Grafana versionnés dans `observability/grafana/dashboards/` et provisionnés automatiquement : **ecom — API** (SLO, latence p50/p95/p99 avec exemplars, trafic par endpoint, statuts, ressources) et **ecom — Métier** (paiements, appels fournisseur, webhooks, commandes, abandon, pages vues). Modifier un dashboard dans Grafana puis exporter son JSON dans le dépôt.
 
 ---
 
