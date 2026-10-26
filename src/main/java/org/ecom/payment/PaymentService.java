@@ -156,8 +156,11 @@ public class PaymentService {
 
     // --- Webhooks ---
 
-    public void handleWebhook(String providerId, WebhookPayload payload) {
-        var event = providers.get(providerId).parseWebhook(payload);
+    public void handleWebhook(String requestedProvider, WebhookPayload payload) {
+        var provider = providers.get(requestedProvider);
+        // From here on, use the registered id rather than the one taken from the URL
+        var providerId = provider.id();
+        var event = provider.parseWebhook(payload);
         if (webhookEvents.existsByProviderAndEventId(providerId, event.eventId())) {
             log.debug("Webhook {} already processed", event.eventId());
             return;
