@@ -94,6 +94,18 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
 - [ ] Images produits : upload vers S3 (aujourd'hui une URL saisie à la main)
 
+### 3c — Offre conseil + matériel
+
+- [x] Type de produit `PRODUCT` / `SERVICE` : les forfaits de conseil se commandent et se paient comme du matériel, sans stock
+- [x] Demandes de devis (formulaire public anti-spam, suivi dans le back-office, limite de débit WAF)
+- [x] Refonte du front : accueil (conseil + matériel), pages Conseil et Matériel, fiche prestation, page devis ; police auto-hébergée
+- [x] Catalogue de démonstration en local (`db/demo`)
+- [ ] Choisir le nom définitif (`frontend/src/app/core/brand.ts`) et l'adresse de contact
+- [ ] Prix HT/TTC : décider de l'affichage (clientèle professionnelle) et des mentions de facturation
+- [ ] Notification e-mail à la réception d'une demande de devis (Amazon SES)
+- [ ] Commandes de prestations : statuts adaptés (planifiée, réalisée) au lieu d'« expédiée / livrée »
+- [ ] Photos produits (upload S3, cf. 3b)
+
 ## Étape 4 — Paiement (PayPal, extensible)
 
 - [x] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
@@ -185,7 +197,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 ## Étape 9 — Sécurité & conformité
 
 - [ ] Aucune donnée carte stockée (PayPal gère la conformité **PCI-DSS**)
-- [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention
+- [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention (dont les demandes de devis)
 - [ ] Headers de sécurité (CSP — autoriser `www.paypal.com`, `*.paypal.com`, `*.paypalobjects.com` pour le SDK PayPal —, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
 - [ ] Jetons stockés côté SPA en mémoire (pas de `localStorage`), refresh token rotatif
 - [ ] Revue OWASP Top 10, test de pénétration avant mise en prod

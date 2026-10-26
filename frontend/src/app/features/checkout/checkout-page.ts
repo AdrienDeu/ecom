@@ -20,7 +20,7 @@ import { AddressForm } from '../account/address-form';
     }
     <div class="layout">
       <section class="card stack" aria-labelledby="shipping">
-        <h2 id="shipping">Adresse de livraison</h2>
+        <h2 id="shipping">{{ servicesOnly() ? 'Adresse de facturation' : 'Adresse de livraison et de facturation' }}</h2>
         @if (addresses.value(); as list) {
           @if (list.length > 0 && !adding()) {
             <fieldset class="stack">
@@ -91,6 +91,12 @@ export class CheckoutPage {
       this.selectedId.set(this.selectedId() ?? list[0]?.id ?? null);
       return list;
     },
+  });
+
+  /** Nothing to ship: the address is only used for the invoice. */
+  protected readonly servicesOnly = computed(() => {
+    const lines = this.cart.cart()?.lines ?? [];
+    return lines.length > 0 && lines.every((line) => line.kind === 'SERVICE');
   });
 
   protected readonly canOrder = computed(() => {

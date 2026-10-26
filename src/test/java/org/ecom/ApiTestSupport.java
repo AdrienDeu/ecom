@@ -61,6 +61,16 @@ public abstract class ApiTestSupport {
         return UUID.fromString(read(result, "$.id"));
     }
 
+    /** A consulting service: sold without stock. */
+    protected UUID createService(String name, String price) throws Exception {
+        var result = mvc.perform(json(post("/api/admin/products").with(admin()), """
+                        {"sku": "%s", "name": "%s", "kind": "SERVICE", "price": %s}
+                        """.formatted(unique("SRV"), name, price)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return UUID.fromString(read(result, "$.id"));
+    }
+
     protected UUID createAddress(String customer) throws Exception {
         var result = mvc.perform(json(post("/api/me/addresses").with(customer(customer)), """
                         {"fullName": "Jeanne Martin", "line1": "1 rue de la Paix", "postalCode": "75002",

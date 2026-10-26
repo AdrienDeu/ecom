@@ -5,5 +5,5 @@ package org.ecom.telemetry;
  * the client sends.
  */
 public enum PageType {
-    CATALOG, PRODUCT, CART, CHECKOUT, ACCOUNT, ORDER, ADMIN, OTHER
+    HOME, CATALOG, PRODUCT, QUOTE, CART, CHECKOUT, ACCOUNT, ORDER, ADMIN, OTHER
 }

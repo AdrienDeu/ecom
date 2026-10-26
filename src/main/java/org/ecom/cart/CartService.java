@@ -9,6 +9,7 @@ import java.util.UUID;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.ecom.cart.CartStore.StoredCart;
 import org.ecom.catalog.CatalogService;
+import org.ecom.catalog.ProductKind;
 import org.ecom.catalog.ProductSummary;
 import org.ecom.inventory.InventoryService;
 import org.ecom.shared.domain.Money;
@@ -117,8 +118,8 @@ public class CartService {
             }
             var lineTotal = product.price().times(item.quantity());
             var purchasable = product.active() && available.getOrDefault(product.id(), 0) >= item.quantity();
-            lines.add(new CartLine(product.id(), product.sku(), product.slug(), product.name(), product.imageUrl(),
-                    product.price(), item.quantity(), lineTotal, purchasable));
+            lines.add(new CartLine(product.id(), product.sku(), product.slug(), product.name(), product.kind(),
+                    product.imageUrl(), product.price(), item.quantity(), lineTotal, purchasable));
             if (purchasable) {
                 total = total.plus(lineTotal);
             }
@@ -129,8 +130,8 @@ public class CartService {
     public record CartView(List<CartLine> lines, Money total, boolean checkoutAllowed) {
     }
 
-    public record CartLine(UUID productId, String sku, String slug, String name, @Schema(nullable = true) String imageUrl,
-                           Money unitPrice,
+    public record CartLine(UUID productId, String sku, String slug, String name, ProductKind kind,
+                           @Schema(nullable = true) String imageUrl, Money unitPrice,
                            int quantity, Money lineTotal, boolean available) {
     }
 

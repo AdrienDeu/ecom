@@ -9,6 +9,7 @@ export interface ProductView {
   id: string;
   imageUrl?: string | null;
   inStock: boolean;
+  kind: 'PRODUCT' | 'SERVICE';
   name: string;
   price: Money;
   sku: string;

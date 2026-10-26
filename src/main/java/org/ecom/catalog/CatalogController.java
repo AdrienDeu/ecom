@@ -26,10 +26,11 @@ class CatalogController {
     }
 
     @GetMapping("/products")
-    PagedModel<ProductView> products(@RequestParam(required = false) String category,
+    PagedModel<ProductView> products(@RequestParam(required = false) ProductKind kind,
+                                     @RequestParam(required = false) String category,
                                      @RequestParam(required = false) String q,
                                      @ParameterObject @PageableDefault(size = 24, sort = "name", direction = Sort.Direction.ASC) Pageable pageable) {
-        return new PagedModel<>(catalog.search(category, q, pageable));
+        return new PagedModel<>(catalog.search(kind, category, q, pageable));
     }
 
     @GetMapping("/products/{slug}")
@@ -38,8 +39,8 @@ class CatalogController {
     }
 
     @GetMapping("/categories")
-    List<CategoryView> categories() {
-        return catalog.categories();
+    List<CategoryView> categories(@RequestParam(required = false) ProductKind kind) {
+        return catalog.categories(kind);
     }
 
 }

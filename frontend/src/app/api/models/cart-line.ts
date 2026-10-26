@@ -5,6 +5,7 @@ import { Money } from '../models/money';
 export interface CartLine {
   available: boolean;
   imageUrl?: string | null;
+  kind: 'PRODUCT' | 'SERVICE';
   lineTotal: Money;
   name: string;
   productId: string;

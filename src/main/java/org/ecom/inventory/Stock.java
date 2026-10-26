@@ -16,19 +16,27 @@ class Stock {
 
     private int reserved;
 
+    /** Untracked stock (services) is always available and never reserved. */
+    private boolean tracked;
+
     @Version
     private long version;
 
     protected Stock() {
     }
 
-    Stock(UUID productId, int onHand) {
+    Stock(UUID productId, int onHand, boolean tracked) {
         this.productId = productId;
         this.onHand = onHand;
+        this.tracked = tracked;
     }
 
     int available() {
-        return onHand - reserved;
+        return tracked ? onHand - reserved : Integer.MAX_VALUE;
+    }
+
+    boolean isTracked() {
+        return tracked;
     }
 
     UUID getProductId() {

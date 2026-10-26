@@ -10,6 +10,7 @@ export interface AdminProductView {
   description?: string | null;
   id: string;
   imageUrl?: string | null;
+  kind: 'PRODUCT' | 'SERVICE';
   name: string;
   price: Money;
   sku: string;

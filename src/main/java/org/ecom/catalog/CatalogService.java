@@ -39,9 +39,12 @@ public class CatalogService {
     }
 
     @Transactional(readOnly = true)
-    public Page<ProductView> search(String categorySlug, String text, Pageable pageable) {
+    public Page<ProductView> search(ProductKind kind, String categorySlug, String text, Pageable pageable) {
         var criteria = new ArrayList<Specification<Product>>();
         criteria.add(ProductRepository.isActive());
+        if (kind != null) {
+            criteria.add(ProductRepository.ofKind(kind));
+        }
         if (StringUtils.hasText(categorySlug)) {
             criteria.add(ProductRepository.inCategory(categorySlug));
         }
@@ -60,9 +63,11 @@ public class CatalogService {
         return ProductView.of(product, inventory.level(product.getId()).available());
     }
 
+    /** All categories, or only those with products of the given kind for sale. */
     @Transactional(readOnly = true)
-    public List<CategoryView> categories() {
-        return categories.findAllByOrderByNameAsc().stream().map(CategoryView::of).toList();
+    public List<CategoryView> categories(ProductKind kind) {
+        var found = kind == null ? categories.findAllByOrderByNameAsc() : categories.findWithActiveProducts(kind);
+        return found.stream().map(CategoryView::of).toList();
     }
 
     /** Products by id, including inactive ones so that callers can report them as unavailable. */
@@ -84,11 +89,16 @@ public class CatalogService {
     @Transactional
     public AdminProductView createProduct(CreateProductRequest request) {
         var slug = StringUtils.hasText(request.slug()) ? request.slug() : Slugs.of(request.name());
-        var product = new Product(request.sku(), slug, request.name(), new Money(request.price(), Money.EUR));
+        var kind = request.kind() == null ? ProductKind.PRODUCT : request.kind();
+        var product = new Product(request.sku(), slug, request.name(), kind, new Money(request.price(), Money.EUR));
         product.update(request.name(), request.description(), product.getPrice(), request.imageUrl(),
                 category(request.categoryId()), true);
         products.saveAndFlush(product);
-        inventory.initialize(product.getId(), request.initialStock());
+        if (kind == ProductKind.SERVICE) {
+            inventory.initializeUntracked(product.getId());
+        } else {
+            inventory.initialize(product.getId(), request.initialStock() == null ? 0 : request.initialStock());
+        }
         return AdminProductView.of(product, inventory.level(product.getId()));
     }
 

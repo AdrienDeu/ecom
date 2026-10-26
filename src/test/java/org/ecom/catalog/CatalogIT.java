@@ -145,4 +145,46 @@ class CatalogIT extends ApiTestSupport {
         mvc.perform(json(post("/api/admin/categories").with(customer("mallory")), body)).andExpect(status().isForbidden());
     }
 
+    @Test
+    void categoriesCanBeFilteredByTheKindOfProductsTheyHold() throws Exception {
+        var slug = unique("audit");
+        var created = mvc.perform(json(post("/api/admin/categories").with(admin()), """
+                        {"name": "Audit %s", "slug": "%s"}
+                        """.formatted(slug, slug)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String categoryId = read(created, "$.id");
+        mvc.perform(json(post("/api/admin/products").with(admin()), """
+                        {"sku": "%s", "name": "Audit flash %s", "kind": "SERVICE", "price": 1500, "categoryId": "%s"}
+                        """.formatted(unique("SRV"), slug, categoryId)))
+                .andExpect(status().isCreated());
+
+        mvc.perform(get("/api/catalog/categories").param("kind", "SERVICE"))
+                .andExpect(jsonPath("$[?(@.slug == '%s')]".formatted(slug)).isNotEmpty());
+        mvc.perform(get("/api/catalog/categories").param("kind", "PRODUCT"))
+                .andExpect(jsonPath("$[?(@.slug == '%s')]".formatted(slug)).isEmpty());
+        mvc.perform(get("/api/catalog/categories"))
+                .andExpect(jsonPath("$[?(@.slug == '%s')]".formatted(slug)).isNotEmpty());
+    }
+
+    @Test
+    void servicesHaveNoStockAndAreFilteredByKind() throws Exception {
+        var name = unique("Audit");
+        var service = createService(name, "1800");
+
+        mvc.perform(get("/api/catalog/products").param("kind", "SERVICE").param("q", name))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].kind").value("SERVICE"))
+                .andExpect(jsonPath("$.content[0].inStock").value(true));
+        mvc.perform(get("/api/catalog/products").param("kind", "PRODUCT").param("q", name))
+                .andExpect(jsonPath("$.content").isEmpty());
+        mvc.perform(get("/api/admin/products/{id}", service).with(admin()))
+                .andExpect(jsonPath("$.stock.tracked").value(false));
+        mvc.perform(put("/api/admin/products/{id}/stock", service).with(admin())
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"onHand": 5}"""))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("STOCK_NOT_TRACKED"));
+    }
+
 }

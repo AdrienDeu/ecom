@@ -10,6 +10,7 @@ import { adminCatalogUpdateProduct } from '../../api/fn/admin-catalog-controller
 import { adminCatalogUpdateStock } from '../../api/fn/admin-catalog-controller/admin-catalog-update-stock';
 import { catalogCategories } from '../../api/fn/catalog-controller/catalog-categories';
 import { errorMessage } from '../../core/errors';
+import { ProductKind } from '../../core/labels';
 import { AdminNav } from './admin-nav';
 
 @Component({
@@ -26,6 +27,20 @@ import { AdminNav } from './admin-nav';
 
     <form [formGroup]="form" (ngSubmit)="save()" class="card stack" novalidate>
       <div class="form-grid">
+        @if (isNew()) {
+          <label>
+            Type
+            <select formControlName="kind">
+              <option value="PRODUCT">Matériel (avec stock)</option>
+              <option value="SERVICE">Prestation de conseil (sans stock)</option>
+            </select>
+          </label>
+        } @else {
+          <label>
+            Type
+            <input [value]="form.controls.kind.value === 'SERVICE' ? 'Prestation de conseil' : 'Matériel'" readonly />
+          </label>
+        }
         <label>
           SKU
           <input formControlName="sku" [readonly]="!isNew()" />
@@ -54,12 +69,12 @@ import { AdminNav } from './admin-nav';
           URL de l'image
           <input formControlName="imageUrl" type="url" />
         </label>
-        @if (isNew()) {
+        @if (isNew() && form.controls.kind.value === 'PRODUCT') {
           <label>
             Stock initial
             <input formControlName="initialStock" type="number" min="0" step="1" />
           </label>
-        } @else {
+        } @else if (!isNew()) {
           <label class="checkbox">
             <input formControlName="active" type="checkbox" /> En vente
           </label>
@@ -78,6 +93,7 @@ import { AdminNav } from './admin-nav';
     </form>
 
     @if (product.value(); as p) {
+      @if (p.stock.tracked) {
       <section class="card stack stock">
         <h3>Stock</h3>
         <p>Physique : <strong>{{ p.stock.onHand }}</strong> · Réservé (commandes non payées) : <strong>{{ p.stock.reserved }}</strong> · Disponible : <strong>{{ p.stock.available }}</strong></p>
@@ -86,6 +102,7 @@ import { AdminNav } from './admin-nav';
           <button type="submit" class="btn secondary" [disabled]="busy()">Mettre à jour</button>
         </form>
       </section>
+      }
     }
 
     <details class="card new-category">
@@ -128,6 +145,7 @@ export class AdminProductPage {
   });
 
   protected readonly form = this.fb.group({
+    kind: ['PRODUCT' as ProductKind],
     sku: ['', [Validators.required, Validators.maxLength(64)]],
     name: ['', [Validators.required, Validators.maxLength(200)]],
     price: [0, [Validators.required, Validators.min(0), Validators.pattern(/^\d+(\.\d{1,2})?$/)]],
@@ -143,6 +161,7 @@ export class AdminProductPage {
       const p = this.product.value();
       if (p) {
         this.form.reset({
+          kind: p.kind,
           sku: p.sku,
           name: p.name,
           price: p.price.amount,
@@ -179,7 +198,12 @@ export class AdminProductPage {
         this.product.set(await this.api.invoke(adminCatalogUpdateProduct, { id, body: { ...common, active: v.active } }));
       } else {
         const created = await this.api.invoke(adminCatalogCreateProduct, {
-          body: { ...common, sku: v.sku, initialStock: Number(v.initialStock) },
+          body: {
+            ...common,
+            kind: v.kind,
+            sku: v.sku,
+            initialStock: v.kind === 'PRODUCT' ? Number(v.initialStock) : undefined,
+          },
         });
         await this.router.navigate(['/admin/products', created.id]);
       }

@@ -10,11 +10,13 @@ import { RequestBuilder } from '../../request-builder';
 import { CategoryView } from '../../models/category-view';
 
 export interface CatalogCategories$Params {
+  kind?: 'PRODUCT' | 'SERVICE';
 }
 
 export function catalogCategories(http: HttpClient, rootUrl: string, params?: CatalogCategories$Params, context?: HttpContext): Observable<StrictHttpResponse<Array<CategoryView>>> {
   const rb = new RequestBuilder(rootUrl, catalogCategories.PATH, 'get');
   if (params) {
+    rb.query('kind', params.kind, {});
   }
 
   return http.request(

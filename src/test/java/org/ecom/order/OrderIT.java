@@ -186,6 +186,22 @@ class OrderIT extends ApiTestSupport {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void servicesAreSoldWithoutReservingStock() throws Exception {
+        var service = createService(unique("Workshop"), "900");
+        var order = placeOrder(unique("liam"), service, 3);
+
+        orders.markPaymentPending(order);
+        orders.markPaid(order);
+
+        assertThat(orders.get(order).status()).isEqualTo(OrderStatus.PAID);
+        assertThat(inventory.level(service).reserved()).isZero();
+        var customer = unique("mia");
+        var cancelled = placeOrder(customer, service, 2);
+        orders.cancelByCustomer(customer, cancelled);
+        assertThat(orders.get(cancelled).status()).isEqualTo(OrderStatus.CANCELLED);
+    }
+
     private UUID placeOrder(String customer, UUID productId, int quantity) throws Exception {
         var address = createAddress(customer);
         addToCart(customer, productId, quantity);
