@@ -343,7 +343,8 @@ public class PaymentService {
     private Optional<Payment> byReference(String providerId, String providerReference) {
         var payment = inTransaction(() -> payments.findByProviderAndProviderReference(providerId, providerReference));
         if (payment.isEmpty()) {
-            log.warn("No {} payment for provider reference {}", providerId, providerReference);
+            // The reference comes from the webhook payload: strip line breaks to prevent log forging.
+            log.warn("No {} payment for provider reference {}", providerId, providerReference.replaceAll("[\\r\\n]", "_"));
         }
         return payment;
     }
