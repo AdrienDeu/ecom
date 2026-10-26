@@ -51,7 +51,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 - [x] Dépendances de base (webmvc, validation, JPA, Flyway, PostgreSQL, actuator, Prometheus, springdoc) — cf. doc technique
 - [x] `compose.yaml` local : PostgreSQL 18, Valkey 9, Prometheus, Grafana (provisionné) — démarré automatiquement avec le profil `local`
-- [ ] Ajouter Tempo au `compose.yaml` (étape 5, avec OpenTelemetry)
+- [x] Ajouter Tempo (et Loki) au `compose.yaml` (étape 5, avec OpenTelemetry)
 - [x] Profils Spring `local`, `staging`, `prod` ; config externalisée (variables d'env, pas de secrets dans le repo) — les tests utilisent Testcontainers sans profil dédié
 - [x] Gestion d'erreurs globale (`ProblemDetail` RFC 9457), sans fuite de détails internes sur les 500
 - [x] Configuration CORS (`ecom.cors.allowed-origins`, `localhost:4200` en local)
@@ -75,7 +75,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Serveur OIDC de test (`mock-oauth2-server`) dans `compose.yaml` pour développer sans Cognito
 - [x] **Back-office API** : produits, catégories, stock, commandes (expédition, livraison, annulation)
 - [x] Réservation de stock atomique au checkout (pas de survente, testé en concurrence), libération à l'annulation et à l'expiration (job `SKIP LOCKED`, multi-instances)
-- [ ] Remboursements (étape 4, via le module paiement)
+- [x] Remboursements (étape 4, via le module paiement)
 - [ ] Clé d'idempotence sur `POST /api/orders` (double-clic → une seule commande)
 - [ ] Cache du catalogue (`@Cacheable`) si les tests de charge le justifient
 
@@ -91,88 +91,102 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Client API généré (`npm run generate:api`) + test de contrat OpenAPI côté backend
 - [x] Parcours complet validé dans Chromium headless (catalogue → panier invité → login → fusion → adresse → commande → back-office → mobile)
 - [ ] Tests E2E Playwright versionnés et exécutés en CD contre staging (étape 8)
-- [ ] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
+- [x] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
 - [ ] Images produits : upload vers S3 (aujourd'hui une URL saisie à la main)
 
 ## Étape 4 — Paiement (PayPal, extensible)
 
-- [ ] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
-- [ ] Modèle `Payment` / `PaymentAttempt` persisté, indépendant du fournisseur
-- [ ] Adapter **PayPal** (API Orders v2) : `create order` → approbation client → `capture`
-- [ ] Authentification OAuth2 client credentials PayPal avec cache du token
-- [ ] **Clé d'idempotence** sur chaque création/capture (`PayPal-Request-Id`)
-- [ ] **Webhooks** PayPal : endpoint dédié + vérification de signature + traitement idempotent
-- [ ] Réconciliation : job planifié qui vérifie les paiements restés `PENDING`
-- [ ] Remboursements (total / partiel)
-- [ ] Résilience : timeouts, retry contrôlé, circuit breaker sur les appels PayPal
-- [ ] Tests : WireMock pour l'API PayPal + tests manuels sur **PayPal Sandbox**
-- [ ] Vérifier qu'ajouter un nouveau provider (ex. Stripe) = **un nouvel adapter, zéro modification du domaine**
+- [x] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
+- [x] Modèle `Payment` / `PaymentAttempt` persisté, indépendant du fournisseur
+- [x] Adapter **PayPal** (API Orders v2) : `create order` → approbation client (PayPal JS SDK Buttons) → `capture`
+- [x] Authentification OAuth2 client credentials PayPal avec cache du token
+- [x] **Clé d'idempotence** sur chaque création/capture/remboursement (`PayPal-Request-Id`)
+- [x] **Webhooks** PayPal : endpoint dédié + vérification de signature + traitement idempotent
+- [x] Réconciliation : job planifié qui vérifie les paiements restés `PENDING`
+- [x] Remboursements (total / partiel) + remboursement automatique d'un paiement capturé sur une commande expirée
+- [x] Résilience : timeouts, retry contrôlé, circuit breaker sur les appels PayPal
+- [x] Tests : WireMock pour l'API PayPal
+- [ ] Tests manuels sur **PayPal Sandbox** (app sandbox + webhook à créer, cf. README)
+- [ ] Vérifier qu'ajouter un nouveau provider (ex. Stripe) = **un nouvel adapter, zéro modification du domaine** (étape 10)
 
 ## Étape 5 — Observabilité & métriques
 
-- [ ] Micrometer + endpoint Prometheus (`/actuator/prometheus`) sur un port de management séparé
-- [ ] Histogrammes de latence (`http.server.requests`) avec percentiles p50/p95/p99
-- [ ] Métriques métier custom :
-  - [ ] `ecom.page.views` (vues par page/type de page)
-  - [ ] `ecom.payment.attempts` tagué `provider`, `outcome` (`success` / `failed` / `cancelled`), `reason`
-  - [ ] `ecom.payment.duration`
-  - [ ] `ecom.orders.created`, `ecom.cart.abandoned`
-- [ ] Traces distribuées (OpenTelemetry → Tempo/Jaeger), corrélation `traceId` dans les logs
-- [ ] Logs structurés JSON → Loki (ou équivalent cloud)
-- [ ] Dashboards Grafana versionnés dans `observability/` (temps de réponse, trafic, taux d'échec paiement)
-- [ ] Alertes : taux d'échec paiement > seuil, p95 > SLO, erreurs 5xx, webhook PayPal en échec
+- [x] Micrometer + endpoint Prometheus (`/actuator/prometheus`) sur un port de management séparé
+- [x] Histogrammes de latence (`http.server.requests`) avec percentiles p50/p95/p99 + buckets aux seuils SLO (100 ms, 300 ms, 1 s)
+- [x] Métriques métier custom :
+  - [x] `ecom.page.views` (vues par type de page, envoyées par la SPA)
+  - [x] `ecom.payment.attempts` tagué `provider`, `outcome` (`success` / `failed` / `cancelled`), `reason`
+  - [x] `ecom.payment.duration` (par opération et issue) + `ecom.payment.webhooks`, `ecom.payment.refunds`
+  - [x] `ecom.orders.placed`, `ecom.orders.expired` (abandon au paiement, à la place de `ecom.cart.abandoned`)
+- [x] Traces distribuées (OpenTelemetry → Tempo en local, ADOT → X-Ray en AWS), corrélation `traceId` dans les logs, exemplars Prometheus → traces
+- [x] Logs structurés JSON (ECS) en staging/prod → CloudWatch ; OTLP → Loki en local, corrélés aux traces
+- [x] Dashboards Grafana versionnés dans `observability/` (temps de réponse, trafic, taux d'échec paiement)
+- [x] Alertes : taux d'échec paiement > seuil, p95 > SLO, erreurs 5xx, webhook PayPal absent ou rejeté, fournisseur en erreur — testées avec `promtool`
+- [ ] Core Web Vitals (LCP, INP, CLS) côté navigateur — CloudWatch RUM (étape 7)
+- [x] Exécuter `promtool check rules` / `test rules` en CI (étape 6)
 
 ## Étape 6 — CI (GitHub Actions)
 
-- [ ] Workflow `ci.yml` sur chaque PR :
-  - [ ] Build + tests unitaires + tests d'intégration (Testcontainers)
-  - [ ] Couverture (JaCoCo) avec seuil minimal
-  - [ ] Qualité : Checkstyle/Spotless, SpotBugs, (optionnel SonarCloud)
-  - [ ] Sécurité : **CodeQL**, scan des dépendances (Trivy / OWASP), scan des secrets
-  - [ ] Build de l'image OCI (`spring-boot:build-image` ou Jib) + scan Trivy de l'image
-- [ ] Cache Maven, exécution parallèle des jobs
-- [ ] Workflow `frontend-ci.yml` sur PR touchant `frontend/` : lint, tests, build, audit des dépendances npm
-- [ ] Workflow `infra-ci.yml` sur PR touchant `infra/` : `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`, `tofu plan` commenté dans la PR
+- [x] Workflow `ci.yml` sur chaque PR :
+  - [x] Build + tests unitaires + tests d'intégration (Testcontainers)
+  - [x] Couverture (JaCoCo, unitaires + intégration) avec seuils : 80 % des lignes, 70 % des branches
+  - [x] Qualité : Spotless (imports, espaces), SpotBugs + FindSecBugs ; SonarCloud écarté pour l'instant
+  - [x] Sécurité : **CodeQL** (Java, TypeScript, Actions), Trivy (dépendances, secrets, misconfigurations) → onglet Security
+  - [x] Build de l'image OCI (`spring-boot:build-image`) + scan Trivy de l'image
+  - [x] Client API Angular vérifié à jour par rapport à l'OpenAPI
+  - [x] Règles d'alerte Prometheus vérifiées et testées (`promtool`)
+- [x] Cache Maven et npm, exécution parallèle des jobs
+- [x] Frontend (lint, tests, build, audit npm) — dans `ci.yml` plutôt qu'un workflow filtré par chemins, pour rester un check obligatoire
+- [x] Workflow `infra-ci.yml` sur PR touchant `infra/` : `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`
+- [x] `tofu plan` commenté dans la PR (job *Plan* de `infra-ci.yml`, rôle IAM lecture seule via OIDC ; ignoré tant que le compte n'est pas amorcé)
+- [x] Nouveaux jobs ajoutés aux checks obligatoires des rulesets `main` et `dev` (sauf `infra-ci.yml`, filtré par chemins)
 
 ## Étape 7 — Infrastructure (OpenTofu)
 
-- [ ] Bootstrap (une fois, à la main) : bucket S3 d'état (versionné, chiffré KMS) + clé KMS de chiffrement d'état
-- [ ] Backend S3 avec verrouillage natif (`use_lockfile = true`) + **chiffrement de l'état** OpenTofu via KMS
-- [ ] Comptes AWS séparés `staging` / `production` (AWS Organizations) — recommandé
-- [ ] Fournisseur OIDC GitHub dans IAM + un rôle IAM par environnement (plan en lecture seule / apply), restreint au repo et à l'environnement
-- [ ] Modules AWS :
-  - [ ] `network` : VPC, sous-réseaux publics/privés sur 2–3 AZ, NAT, VPC endpoints (ECR, S3, Secrets Manager)
-  - [ ] `database` : RDS PostgreSQL Multi-AZ (prod), backups automatiques, chiffrement KMS
-  - [ ] `cache` : ElastiCache (Valkey/Redis)
-  - [ ] `registry` : ECR (scan à l'envoi, tags immuables)
-  - [ ] `backend` : ECS Fargate + ALB + autoscaling
-  - [ ] `identity` : Cognito User Pool, groupes `CUSTOMER`/`ADMIN`, client SPA, domaine Managed Login
-  - [ ] `frontend` : bucket S3 privé + CloudFront (OAC) + ACM
-  - [ ] `edge` : Route 53, certificats ACM, AWS WAF
-  - [ ] `secrets` : Secrets Manager (PayPal, BDD)
-  - [ ] `observability` : Amazon Managed Prometheus + Amazon Managed Grafana, CloudWatch Logs, X-Ray/ADOT
-- [ ] Un répertoire par environnement (`envs/staging`, `envs/production`) réutilisant les modules
-- [ ] Versions de providers épinglées + `.terraform.lock.hcl` committé
-- [ ] Secrets PayPal (client id/secret, webhook id) dans Secrets Manager, injectés dans la tâche ECS
+> Code complet et vérifié (`fmt`, `validate`, `tflint`, `trivy config`) ; rien n'est encore appliqué. Procédure : [infra/README.md](../infra/README.md).
+
+- [x] Bootstrap (une fois par compte, à la main) : bucket S3 d'état (versionné, SSE-KMS, TLS obligatoire) + clé KMS de chiffrement d'état, état migré dans le bucket
+- [x] Backend S3 avec verrouillage natif (`use_lockfile = true`) + **chiffrement de l'état et des plans** OpenTofu via KMS (`enforced`)
+- [ ] Comptes AWS séparés `staging` / `production` (AWS Organizations) — le code l'impose (`allowed_account_ids`), comptes à créer
+- [x] Fournisseur OIDC GitHub dans IAM + rôles par environnement : `plan` (lecture seule, PR et `main`) / `apply` (environnement GitHub uniquement)
+- [x] Modules AWS (assemblés par `platform`, seul module appelé par les environnements) :
+  - [x] `network` : VPC, sous-réseaux public/app/data sur 2–3 AZ, NAT (une ou par AZ), VPC endpoints (ECR, S3, Secrets Manager, logs…), flow logs
+  - [x] `database` : RDS PostgreSQL Multi-AZ (prod), backups automatiques, chiffrement KMS, mot de passe géré par RDS
+  - [x] `cache` : ElastiCache Valkey (TLS, jeton d'authentification)
+  - [x] `registry` : ECR (scan à l'envoi, tags immuables)
+  - [x] `backend` : ECS Fargate (app + collecteur ADOT) + ALB (limité à CloudFront) + autoscaling CPU/requêtes + circuit breaker
+  - [x] `identity` : Cognito User Pool, groupes `CUSTOMER`/`ADMIN`, client SPA, domaine Managed Login
+  - [x] `frontend` : bucket S3 privé + CloudFront (OAC), `/api/*` vers l'ALB, en-têtes de sécurité (CSP PayPal, HSTS), `config.json`
+  - [x] `edge` : certificat ACM et AWS WAF (règles gérées + rate limiting paiement et télémétrie ; le login est chez Cognito) en us-east-1, enregistrements Route 53
+  - [x] `secrets` : Secrets Manager (PayPal ; BDD via le secret géré par RDS)
+  - [x] `observability` : Amazon Managed Prometheus (règles d'alerte d'`observability/`), Managed Grafana (optionnel), CloudWatch Logs et alarmes, X-Ray via ADOT, SNS
+- [x] Un répertoire par environnement (`envs/staging`, `envs/production`) réutilisant les modules, seules les dimensions diffèrent
+- [x] Versions de providers épinglées + `.terraform.lock.hcl` committé
+- [x] Secrets PayPal (client id/secret, webhook id) dans Secrets Manager, injectés dans la tâche ECS (`paypal_enabled`)
+- [ ] Appliquer le bootstrap puis les environnements (zone Route 53 déléguée, domaine réel dans `terraform.tfvars`)
 
 ## Étape 8 — CD
 
-- [ ] Workflow `cd.yml` sur merge dans `main` :
-  - [ ] Publication de l'image taguée par SHA + version, **signature cosign** + **SBOM**
-  - [ ] Push de l'image dans ECR, `tofu apply` staging → nouvelle révision de tâche ECS
-  - [ ] SPA : build → sync S3 → invalidation CloudFront
-  - [ ] Migrations Flyway automatiques au démarrage (ou job dédié)
-  - [ ] Smoke tests + tests E2E (Playwright) sur staging, paiement PayPal Sandbox inclus
-  - [ ] Approbation manuelle (environnement GitHub `production`) → déploiement prod
-- [ ] Déploiement sans interruption : rolling ECS avec **deployment circuit breaker** (ou blue/green via CodeDeploy)
-- [ ] Rollback automatique si healthcheck ou alarmes CloudWatch post-déploiement en échec
+- [x] Workflow `cd.yml` sur merge dans `main` (déploiement par environnement dans le workflow réutilisable `deploy.yml`) :
+  - [x] Image construite une fois, taguée `sha-<commit>`, **signée avec cosign** (sans clé, OIDC) + **SBOM** CycloneDX attesté ; même digest dans chaque environnement (vérifié au push)
+  - [ ] Tag de version SemVer sur l'image (avec release-please)
+  - [x] Push de l'image dans ECR, `tofu apply` staging → nouvelle révision de tâche ECS, attente du déploiement complet
+  - [x] SPA : build unique → sync S3 (bundles hachés en cache long, `index.html` en `no-cache`, `config.json` préservé) → invalidation CloudFront
+  - [x] Migrations Flyway automatiques au démarrage
+  - [x] Smoke tests sur l'environnement déployé (SPA, `config.json`, API catalogue)
+  - [ ] Tests E2E (Playwright) sur staging, paiement PayPal Sandbox inclus
+  - [x] Approbation manuelle (environnement GitHub `production`) → déploiement prod
+- [x] Déploiement sans interruption : rolling ECS avec **deployment circuit breaker**
+- [x] Rollback automatique : circuit breaker (tâches non saines) + alarmes de déploiement ECS (5xx, p95 > 1 s) ; la CD échoue si la nouvelle révision n'est pas entièrement déployée
+- [x] Détection de dérive : `drift.yml` quotidien (`tofu plan -detailed-exitcode` par environnement)
 - [ ] Release automatique (tag + changelog) via release-please ou semantic-release
+- [ ] Valider le premier run réel de la CD (après amorçage des comptes, cf. étape 7)
 
 ## Étape 9 — Sécurité & conformité
 
 - [ ] Aucune donnée carte stockée (PayPal gère la conformité **PCI-DSS**)
 - [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention
-- [ ] Headers de sécurité (CSP, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
+- [ ] Headers de sécurité (CSP — autoriser `www.paypal.com`, `*.paypal.com`, `*.paypalobjects.com` pour le SDK PayPal —, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
 - [ ] Jetons stockés côté SPA en mémoire (pas de `localStorage`), refresh token rotatif
 - [ ] Revue OWASP Top 10, test de pénétration avant mise en prod
 - [ ] Sauvegardes RDS automatiques + test de restauration

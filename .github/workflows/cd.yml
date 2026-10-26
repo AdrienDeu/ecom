@@ -1,0 +1,121 @@
+name: CD
+
+# Sur chaque merge dans main : un seul build de l'image et de la SPA, déployé en staging puis, après approbation
+# (environnement GitHub production), en production. Le code a déjà passé la CI de la PR : pas de tests ici.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Pas de concurrence au niveau du workflow : une approbation de production en attente ne doit pas bloquer les
+# déploiements suivants en staging. Un déploiement à la fois par environnement (deploy.yml) ; parmi les runs en
+# attente pour un environnement, seul le plus récent est gardé.
+
+env:
+  CRANE_VERSION: v0.22.1
+
+jobs:
+  image:
+    name: Build image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.archive.outputs.tag }}
+      digest: ${{ steps.archive.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
+        with:
+          version: ${{ env.CRANE_VERSION }}
+
+      - name: Build image (Cloud Native Buildpacks)
+        run: >
+          ./mvnw -B -ntp spring-boot:build-image -DskipTests -Djacoco.skip=true -Dspotbugs.skip=true -Dspotless.check.skip=true
+          -Dspring-boot.build-image.imageName=ecom:build
+
+      # Archive poussée telle quelle dans le registre de chaque environnement : même digest partout
+      - name: Archive image
+        id: archive
+        run: |
+          mkdir -p "$RUNNER_TEMP/image"
+          docker save ecom:build -o "$RUNNER_TEMP/image/image.tar"
+          cp target/classes/META-INF/sbom/application.cdx.json "$RUNNER_TEMP/image/"
+          digest=$(crane digest --tarball "$RUNNER_TEMP/image/image.tar")
+          echo "tag=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "Image sha-${GITHUB_SHA} : $digest" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image
+          path: ${{ runner.temp }}/image/
+          retention-days: 7
+          if-no-files-found: error
+
+  spa:
+    name: Build SPA
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+      # Même build pour tous les environnements : leur configuration est dans /config.json (OpenTofu)
+      - run: npm run build -- --configuration production
+      - run: rm -f dist/ecom-frontend/browser/config.json
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: spa
+          path: frontend/dist/ecom-frontend/browser/
+          retention-days: 7
+          if-no-files-found: error
+
+  # Tant que le compte AWS n'est pas amorcé (variables absentes, infra/README.md), seuls les builds tournent ; la
+  # production, qui dépend de staging, est alors ignorée aussi
+  staging:
+    needs: [image, spa]
+    if: vars.AWS_ACCOUNT_ID_STAGING != ''
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: staging
+      image-tag: ${{ needs.image.outputs.tag }}
+      image-digest: ${{ needs.image.outputs.digest }}
+
+  production:
+    needs: [image, staging]
+    if: vars.AWS_ACCOUNT_ID_PRODUCTION != ''
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: production
+      image-tag: ${{ needs.image.outputs.tag }}
+      image-digest: ${{ needs.image.outputs.digest }}

@@ -6,3 +6,13 @@ ecom:
   order:
     expiry-job:
       enabled: false
+  payment:
+    reconciliation:
+      enabled: false
+    providers:
+      paypal:
+        # base-url pointe vers le serveur WireMock (TestcontainersConfiguration)
+        enabled: true
+        client-id: test-client
+        client-secret: test-secret
+        webhook-id: test-webhook

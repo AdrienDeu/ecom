@@ -1,0 +1,209 @@
+name: Deploy
+
+# Déploie dans un environnement l'image et la SPA construites par cd.yml : appelé une fois par environnement.
+# L'environnement GitHub porte le rôle apply (variable AWS_APPLY_ROLE_ARN) et, en production, l'approbation.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: staging ou production
+        type: string
+        required: true
+      image-tag:
+        description: Tag de l'image (sha-<commit>)
+        type: string
+        required: true
+      image-digest:
+        description: Digest attendu de l'image, identique dans tous les environnements
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  TOFU_VERSION: 1.13.1
+  CRANE_VERSION: v0.22.1
+  COSIGN_VERSION: v3.1.3
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  deploy:
+    name: Deploy (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.outputs.outputs.app-url }}
+    # Jamais deux déploiements simultanés d'un environnement, et jamais d'annulation en cours d'apply
+    concurrency:
+      group: deploy-${{ inputs.environment }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write # OIDC : rôle AWS et signature cosign sans clé
+    env:
+      TF_VAR_account_id: ${{ inputs.environment == 'production' && vars.AWS_ACCOUNT_ID_PRODUCTION || vars.AWS_ACCOUNT_ID_STAGING }}
+      IMAGE_TAG: ${{ inputs.image-tag }}
+      IMAGE_DIGEST: ${{ inputs.image-digest }}
+    defaults:
+      run:
+        working-directory: infra/envs/${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - uses: imjasonh/setup-crane@feee3b6bb0d4c68370f256a4502498c9227e5c6b # v0.7
+        with:
+          version: ${{ env.CRANE_VERSION }}
+
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          role-session-name: deploy-${{ github.run_id }}
+          aws-region: eu-west-3
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+          path: ${{ runner.temp }}/image
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: spa
+          path: ${{ runner.temp }}/spa
+
+      - name: tofu init
+        run: tofu init -input=false -lockfile=readonly -backend-config="bucket=ecom-tofu-state-${TF_VAR_account_id}"
+
+      # Le dépôt ECR est créé au premier déploiement manuel (infra/README.md §2)
+      - name: Read registry
+        id: registry
+        run: |
+          if ! repo=$(tofu output -raw ecr_repository_url 2>/dev/null); then
+            echo "::error::Environnement jamais déployé : suivre le premier déploiement manuel d'infra/README.md"
+            exit 1
+          fi
+          echo "repository=$repo" >> "$GITHUB_OUTPUT"
+
+      # Même archive dans chaque environnement : le digest poussé doit être celui calculé au build
+      - name: Push image
+        env:
+          REPOSITORY: ${{ steps.registry.outputs.repository }}
+        run: |
+          aws ecr get-login-password | crane auth login "${REPOSITORY%%/*}" -u AWS --password-stdin
+          if existing=$(crane digest "$REPOSITORY:$IMAGE_TAG" 2>/dev/null); then
+            echo "Image déjà présente : $existing"
+          else
+            crane push "$RUNNER_TEMP/image/image.tar" "$REPOSITORY:$IMAGE_TAG"
+          fi
+          pushed=$(crane digest "$REPOSITORY:$IMAGE_TAG")
+          if [ "$pushed" != "$IMAGE_DIGEST" ]; then
+            echo "::error::Digest inattendu pour $IMAGE_TAG : $pushed au lieu de $IMAGE_DIGEST"
+            exit 1
+          fi
+
+      # Signature sans clé (identité OIDC du workflow, journal de transparence Rekor) + SBOM CycloneDX attesté
+      - name: Sign image and attest SBOM
+        env:
+          IMAGE: ${{ steps.registry.outputs.repository }}@${{ inputs.image-digest }}
+        run: |
+          cosign sign --yes "$IMAGE"
+          cosign attest --yes --type cyclonedx --predicate "$RUNNER_TEMP/image/application.cdx.json" "$IMAGE"
+
+      # Toute l'infrastructure de l'environnement, avec la nouvelle image (référencée par digest)
+      - name: tofu apply
+        env:
+          TF_VAR_image: ${{ steps.registry.outputs.repository }}@${{ inputs.image-digest }}
+        run: tofu apply -input=false -auto-approve
+
+      - name: Read outputs
+        id: outputs
+        run: |
+          {
+            echo "app-url=$(tofu output -raw app_url)"
+            echo "cluster=$(tofu output -raw ecs_cluster_name)"
+            echo "service=$(tofu output -raw ecs_service_name)"
+            echo "task-definition=$(tofu output -raw task_definition_arn)"
+            echo "spa-bucket=$(tofu output -raw spa_bucket)"
+            echo "distribution=$(tofu output -raw cloudfront_distribution_id)"
+          } >> "$GITHUB_OUTPUT"
+
+      # Succès seulement si la nouvelle révision est entièrement déployée : un rollback (circuit breaker ou
+      # alarmes de déploiement) fait échouer le job, la révision précédente restant en service
+      - name: Wait for ECS rollout
+        env:
+          CLUSTER: ${{ steps.outputs.outputs.cluster }}
+          SERVICE: ${{ steps.outputs.outputs.service }}
+          TASK_DEFINITION: ${{ steps.outputs.outputs.task-definition }}
+        run: |
+          for _ in $(seq 1 90); do
+            state=$(aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+              --query "services[0].deployments[?taskDefinition=='${TASK_DEFINITION}'] | [0].rolloutState" --output text)
+            echo "$(date +%T) ${TASK_DEFINITION##*/} : $state"
+            case "$state" in
+              COMPLETED) exit 0 ;;
+              FAILED|None)
+                aws ecs describe-services --cluster "$CLUSTER" --services "$SERVICE" \
+                  --query 'services[0].events[:10].[createdAt,message]' --output text
+                echo "::error::Déploiement ECS en échec (rollback vers la révision précédente)"
+                exit 1 ;;
+            esac
+            sleep 20
+          done
+          echo "::error::Déploiement ECS non terminé après 30 minutes"
+          exit 1
+
+      # Fichiers d'abord, index.html ensuite : un visiteur ne reçoit jamais un index.html qui référence des fichiers
+      # absents. Les anciens fichiers restent (onglets ouverts sur la version précédente). config.json est écrit
+      # par OpenTofu. Cache d'un an pour les bundles à nom haché (main-<hash>.js…), d'une heure pour le reste.
+      - name: Publish SPA
+        env:
+          BUCKET: ${{ steps.outputs.outputs.spa-bucket }}
+          DISTRIBUTION: ${{ steps.outputs.outputs.distribution }}
+        working-directory: ${{ runner.temp }}/spa
+        run: |
+          aws s3 sync . "s3://$BUCKET" --only-show-errors \
+            --exclude '*' --include '*-*.js' --include '*-*.css' \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 sync . "s3://$BUCKET" --only-show-errors \
+            --exclude index.html --exclude config.json --exclude '*-*.js' --exclude '*-*.css' \
+            --cache-control "public, max-age=3600"
+          aws s3 cp index.html "s3://$BUCKET/index.html" --only-show-errors --cache-control "no-cache"
+          id=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/index.html' '/' \
+            --query Invalidation.Id --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$id"
+
+      - name: Smoke tests
+        env:
+          APP_URL: ${{ steps.outputs.outputs.app-url }}
+        run: |
+          check() {
+            local path=$1 type=$2
+            for attempt in 1 2 3 4 5; do
+              if curl -fsS --max-time 10 -o /dev/null -w '%{content_type}' "$APP_URL$path" | grep -q "$type"; then
+                echo "OK  $path"
+                return 0
+              fi
+              sleep $((attempt * 5))
+            done
+            echo "::error::Smoke test en échec : $path"
+            return 1
+          }
+          status=0
+          check / text/html || status=1
+          check /products text/html || status=1
+          check /config.json application/json || status=1
+          check /api/catalog/categories application/json || status=1
+          check '/api/catalog/products?size=1' application/json || status=1
+          exit $status

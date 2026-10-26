@@ -33,6 +33,14 @@ export type { AdminCatalogCreateProduct$Params as AdminCatalogCreateProduct$Para
 export { adminCatalogCreateProduct as adminCatalogCreateProduct } from './fn/admin-catalog-controller/admin-catalog-create-product';
 export type { AdminCatalogCreateCategory$Params as AdminCatalogCreateCategory$Params } from './fn/admin-catalog-controller/admin-catalog-create-category';
 export { adminCatalogCreateCategory as adminCatalogCreateCategory } from './fn/admin-catalog-controller/admin-catalog-create-category';
+export type { TelemetryPageView$Params as TelemetryPageView$Params } from './fn/telemetry-controller/telemetry-page-view';
+export { telemetryPageView as telemetryPageView } from './fn/telemetry-controller/telemetry-page-view';
+export type { PaymentStart$Params as PaymentStart$Params } from './fn/payment-controller/payment-start';
+export { paymentStart as paymentStart } from './fn/payment-controller/payment-start';
+export type { PaymentCapture$Params as PaymentCapture$Params } from './fn/payment-controller/payment-capture';
+export { paymentCapture as paymentCapture } from './fn/payment-controller/payment-capture';
+export type { PaymentMethods$Params as PaymentMethods$Params } from './fn/payment-controller/payment-methods';
+export { paymentMethods as paymentMethods } from './fn/payment-controller/payment-methods';
 export type { OrderMyOrders$Params as OrderMyOrders$Params } from './fn/order-controller/order-my-orders';
 export { orderMyOrders as orderMyOrders } from './fn/order-controller/order-my-orders';
 export type { OrderCheckout$Params as OrderCheckout$Params } from './fn/order-controller/order-checkout';
@@ -41,6 +49,10 @@ export type { OrderCancel$Params as OrderCancel$Params } from './fn/order-contro
 export { orderCancel as orderCancel } from './fn/order-controller/order-cancel';
 export type { OrderMyOrder$Params as OrderMyOrder$Params } from './fn/order-controller/order-my-order';
 export { orderMyOrder as orderMyOrder } from './fn/order-controller/order-my-order';
+export type { AdminPaymentRefund$Params as AdminPaymentRefund$Params } from './fn/admin-payment-controller/admin-payment-refund';
+export { adminPaymentRefund as adminPaymentRefund } from './fn/admin-payment-controller/admin-payment-refund';
+export type { AdminPaymentList$Params as AdminPaymentList$Params } from './fn/admin-payment-controller/admin-payment-list';
+export { adminPaymentList as adminPaymentList } from './fn/admin-payment-controller/admin-payment-list';
 export type { AdminOrderShip$Params as AdminOrderShip$Params } from './fn/admin-order-controller/admin-order-ship';
 export { adminOrderShip as adminOrderShip } from './fn/admin-order-controller/admin-order-ship';
 export type { AdminOrderDeliver$Params as AdminOrderDeliver$Params } from './fn/admin-order-controller/admin-order-deliver';

@@ -13,11 +13,17 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+env:
+  # Images d'outils épinglées par digest (non suivies par Dependabot : à mettre à jour à la main)
+  TRIVY_IMAGE: aquasec/trivy:0.75.0@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa
+  PROMETHEUS_IMAGE: prom/prometheus:v3.7.3@sha256:49214755b6153f90a597adcbff0252cc61069f8ab69ce8411285cd4a560e8038
+
 jobs:
   backend:
+    # Nom utilisé comme check obligatoire par les rulesets : ne pas le changer sans les mettre à jour
     name: Backend (build & tests)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,8 +35,42 @@ jobs:
           java-version: '25'
           cache: maven
 
-      - name: Build & test
+      # Spotless (validate), tests unitaires et d'intégration (Testcontainers), SpotBugs, couverture JaCoCo avec seuils
+      - name: Build, quality & tests
         run: ./mvnw -B -ntp verify
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          [ -f target/site/jacoco/jacoco.csv ] || exit 0
+          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          import csv
+          rows = list(csv.DictReader(open('target/site/jacoco/jacoco.csv')))
+          def ratio(kind):
+              covered = sum(int(r[f'{kind}_COVERED']) for r in rows)
+              missed = sum(int(r[f'{kind}_MISSED']) for r in rows)
+              return covered / (covered + missed) if covered + missed else 1
+          print('### Couverture (tests unitaires + intégration)\n')
+          print('| Lignes | Branches |\n|---|---|')
+          print(f"| {ratio('LINE'):.1%} | {ratio('BRANCH'):.1%} |")
+          EOF
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-report
+          path: target/site/jacoco/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Écrit par EcomApplicationIT, consommé par le job api-client
+      - name: Upload OpenAPI document
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openapi
+          path: target/openapi.json
+          retention-days: 1
 
       - name: Upload test reports
         if: failure()
@@ -40,9 +80,11 @@ jobs:
           path: |
             target/surefire-reports/
             target/failsafe-reports/
+            target/spotbugsXml.xml
           retention-days: 7
 
   frontend:
+    # Nom utilisé comme check obligatoire par les rulesets : ne pas le changer sans les mettre à jour
     name: Frontend (lint, test, build)
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -65,3 +107,154 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build -- --configuration production
+
+  api-client:
+    name: API client up to date
+    needs: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: openapi
+          path: ${{ runner.temp }}/openapi
+
+      - run: npm ci
+
+      - name: Regenerate the client from the backend's OpenAPI document
+        run: npx ng-openapi-gen -c ng-openapi-gen.json -i "$RUNNER_TEMP/openapi/openapi.json" --silent true
+
+      - name: Fail if the committed client is stale
+        run: |
+          if [ -n "$(git status --porcelain -- src/app/api)" ]; then
+            git status --short -- src/app/api
+            git diff -- src/app/api | head -100
+            echo "::error::Le client API généré n'est pas à jour : lancer le backend puis 'npm run generate:api' dans frontend/"
+            exit 1
+          fi
+
+  dependencies:
+    name: Security (dependencies & secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Arbre exact des dépendances Maven (SBOM CycloneDX) : Trivy n'a pas à résoudre le pom.xml sur Maven Central,
+      # qui limite le débit des runners partagés (429)
+      - name: Generate SBOM
+        run: ./mvnw -B -ntp generate-resources -Dspotless.check.skip=true
+
+      # Rapports complets dans l'onglet Security (code scanning), y compris les failles sans correctif
+      - name: Trivy (SARIF)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" sbom --severity MEDIUM,HIGH,CRITICAL \
+            --format sarif --output trivy-maven.sarif target/classes/META-INF/sbom/application.cdx.json
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln,secret,misconfig --severity MEDIUM,HIGH,CRITICAL \
+            --skip-files pom.xml --skip-dirs frontend/node_modules --skip-dirs target --format sarif --output trivy-fs.sarif .
+
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: always() && hashFiles('trivy-maven.sarif') != ''
+        with:
+          sarif_file: trivy-maven.sarif
+          category: trivy-maven
+
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: always() && hashFiles('trivy-fs.sarif') != ''
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+      # Bloquant : vulnérabilité HIGH/CRITICAL ayant un correctif (Maven, npm), ou secret commité
+      - name: Trivy (gate)
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" sbom --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 target/classes/META-INF/sbom/application.cdx.json
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed \
+            --skip-files pom.xml --skip-dirs frontend/node_modules --skip-dirs target --exit-code 1 .
+
+  image:
+    name: Image OCI (build & scan)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Les tests et l'analyse tournent dans le job backend
+      - name: Build image (Cloud Native Buildpacks)
+        run: >
+          ./mvnw -B -ntp spring-boot:build-image -DskipTests -Djacoco.skip=true -Dspotbugs.skip=true -Dspotless.check.skip=true
+          -Dspring-boot.build-image.imageName=ecom:ci
+
+      - name: Trivy image (SARIF)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/out" \
+            "$TRIVY_IMAGE" image --severity HIGH,CRITICAL --format sarif --output /out/trivy-image.sarif ecom:ci
+
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: always() && hashFiles('trivy-image.sarif') != ''
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      # Bloquant sur CRITICAL corrigeable seulement : l'image de base Paketo est mise à jour par le buildpack,
+      # les HIGH sont suivis dans l'onglet Security
+      - name: Trivy image (gate)
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+            "$TRIVY_IMAGE" image --severity CRITICAL --ignore-unfixed --exit-code 1 ecom:ci
+
+  observability:
+    name: Observability (alert rules & dashboards)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check and test Prometheus rules
+        run: |
+          docker run --rm -v "$PWD/observability:/obs:ro" --entrypoint promtool "$PROMETHEUS_IMAGE" check rules /obs/alerts/ecom.yml
+          docker run --rm -v "$PWD/observability:/obs:ro" -w /obs/alerts/tests --entrypoint promtool "$PROMETHEUS_IMAGE" test rules ecom.test.yml
+
+      - name: Dashboards are valid JSON with a stable uid
+        run: |
+          for f in observability/grafana/dashboards/*.json; do
+            python3 -c "import json,sys; d=json.load(open(sys.argv[1])); assert d.get('uid'), 'uid manquant'" "$f"
+          done

@@ -1,0 +1,103 @@
+# promtool test rules observability/alerts/tests/ecom.test.yml
+rule_files:
+  - ../ecom.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: taux d'échec paiement au-dessus du seuil
+    interval: 1m
+    input_series:
+      - series: 'ecom_payment_attempts_total{provider="paypal", outcome="success", reason="none"}'
+        values: '0+9x40'
+      - series: 'ecom_payment_attempts_total{provider="paypal", outcome="failed", reason="INSTRUMENT_DECLINED"}'
+        values: '0+1x40'
+    alert_rule_test:
+      # Condition vraie mais pas encore depuis 5 min (for)
+      - eval_time: 3m
+        alertname: EcomPaymentFailureRateHigh
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: EcomPaymentFailureRateHigh
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              provider: paypal
+            exp_annotations:
+              summary: "Taux d'échec des paiements paypal au-dessus de 5 % (10%)"
+
+  - name: peu de paiements, pas d'alerte malgré les échecs
+    interval: 1m
+    input_series:
+      - series: 'ecom_payment_attempts_total{provider="paypal", outcome="success", reason="none"}'
+        values: '0x40'
+      - series: 'ecom_payment_attempts_total{provider="paypal", outcome="failed", reason="INSTRUMENT_DECLINED"}'
+        values: '0 0 0 0 0 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: EcomPaymentFailureRateHigh
+        exp_alerts: []
+
+  - name: webhooks absents alors que des paiements sont initiés
+    interval: 1m
+    input_series:
+      - series: 'ecom_payment_duration_seconds_count{provider="paypal", operation="initiate", outcome="succeeded"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: EcomPaymentWebhooksMissing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              provider: paypal
+            exp_annotations:
+              summary: "Aucun webhook paypal reçu depuis 1 h alors que des paiements sont initiés"
+
+  - name: webhooks reçus, pas d'alerte
+    interval: 1m
+    input_series:
+      - series: 'ecom_payment_duration_seconds_count{provider="paypal", operation="initiate", outcome="succeeded"}'
+        values: '0+1x90'
+      - series: 'ecom_payment_webhooks_total{provider="paypal", type="PAYMENT.CAPTURE.COMPLETED", result="processed"}'
+        values: '0+1x90'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: EcomPaymentWebhooksMissing
+        exp_alerts: []
+
+  - name: erreurs 5xx
+    interval: 1m
+    input_series:
+      - series: 'http_server_requests_seconds_count{application="ecom", uri="/api/orders", status="200"}'
+        values: '0+95x20'
+      - series: 'http_server_requests_seconds_count{application="ecom", uri="/api/orders", status="500"}'
+        values: '0+5x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: EcomHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+            exp_annotations:
+              summary: "Plus de 1 % de réponses 5xx sur 5 min (5%)"
+
+  - name: latence p95 au-dessus du SLO
+    interval: 1m
+    input_series:
+      # 90 % des requêtes sous 100 ms, 10 % entre 300 ms et 1 s : p95 entre 300 ms et 1 s
+      - series: 'http_server_requests_seconds_bucket{application="ecom", uri="/api/catalog/products", le="0.1"}'
+        values: '0+90x30'
+      - series: 'http_server_requests_seconds_bucket{application="ecom", uri="/api/catalog/products", le="0.3"}'
+        values: '0+90x30'
+      - series: 'http_server_requests_seconds_bucket{application="ecom", uri="/api/catalog/products", le="1.0"}'
+        values: '0+100x30'
+      - series: 'http_server_requests_seconds_bucket{application="ecom", uri="/api/catalog/products", le="+Inf"}'
+        values: '0+100x30'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: EcomSlowResponses
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "Temps de réponse p95 au-dessus du SLO de 300 ms (650ms)"

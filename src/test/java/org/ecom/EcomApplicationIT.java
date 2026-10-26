@@ -7,11 +7,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
-
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalManagementPort;
@@ -19,7 +20,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, PaypalStubConfiguration.class})
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "management.server.port=0")
 class EcomApplicationIT {
@@ -46,6 +47,16 @@ class EcomApplicationIT {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("jvm_memory_used_bytes");
+        assertThat(response.body()).contains("ecom_page_views_total{application=\"ecom\"", "ecom_orders_placed_total");
+    }
+
+    @Test
+    void latencyHistogramHasBucketsAtTheSloThresholds() throws Exception {
+        get(port, "/api/catalog/products");
+
+        var metrics = get(managementPort, "/actuator/prometheus").body();
+
+        assertThat(metrics).contains("http_server_requests_seconds_bucket", "le=\"0.1\"", "le=\"0.3\"", "le=\"1.0\"");
     }
 
     @Test
@@ -68,12 +79,28 @@ class EcomApplicationIT {
         var document = JsonPath.parse(get(port, "/api/openapi").body());
 
         List<String> operationIds = document.read("$.paths.*.*.operationId");
-        assertThat(operationIds).contains("catalogProducts", "adminCatalogProducts", "orderCheckout").doesNotHaveDuplicates();
+        assertThat(operationIds).contains("catalogProducts", "adminCatalogProducts", "orderCheckout",
+                "paymentMethods", "paymentStart", "paymentCapture", "adminPaymentList", "adminPaymentRefund").doesNotHaveDuplicates();
         List<String> required = document.read("$.components.schemas.ProductView.required");
         assertThat(required).contains("id", "name", "price", "inStock").doesNotContain("category", "description");
         assertThat(document.<Boolean>read("$.components.schemas.ProductView.properties.description.nullable")).isTrue();
+        // Webhooks are for PayPal, not for the generated client
+        Map<String, Object> paths = document.read("$.paths");
+        assertThat(paths).doesNotContainKey("/api/webhooks/{provider}");
         Map<String, Object> categoryView = document.read("$.components.schemas.CategoryView");
         assertThat(categoryView).doesNotContainKey("nullable");
+    }
+
+    /**
+     * Writes the document the Angular client is generated from; CI regenerates the client from it and fails if the
+     * committed one differs. The server URL is the local backend's, as with {@code npm run generate:api}.
+     */
+    @Test
+    void writesOpenApiDocumentForClientGeneration() throws Exception {
+        var document = JsonPath.parse(get(port, "/api/openapi").body())
+                .set("$.servers", List.of(Map.of("url", "http://localhost:8080", "description", "Generated server url")));
+
+        Files.writeString(Path.of("target", "openapi.json"), document.jsonString());
     }
 
     private HttpResponse<String> get(int port, String path) throws IOException, InterruptedException {

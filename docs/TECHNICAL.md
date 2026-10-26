@@ -354,18 +354,26 @@ public interface PaymentProvider {
     /** Identifiant stable : "paypal", "stripe"... */
     String id();
 
-    /** Initie le paiement ; renvoie éventuellement une URL de redirection/approbation. */
+    /** Paramètres publics nécessaires à la SPA (ex. client id PayPal), jamais de secret. */
+    Map<String, String> clientSettings();
+
+    /** Crée le paiement chez le fournisseur, à faire approuver par le client. */
     PaymentInitiation initiate(PaymentRequest request);
 
     /** Finalise le paiement (capture) après approbation du client. */
-    PaymentResult capture(PaymentReference reference);
+    PaymentResult capture(PaymentReference reference, String idempotencyKey);
 
-    PaymentResult refund(PaymentReference reference, Money amount);
+    /** État du paiement chez le fournisseur (job de réconciliation). */
+    PaymentResult retrieve(PaymentReference reference);
 
-    /** Vérifie et traduit un webhook fournisseur en événement de domaine. */
+    RefundResult refund(PaymentReference reference, Money amount, String idempotencyKey);
+
+    /** Vérifie et traduit un webhook fournisseur en événement indépendant du fournisseur. */
     PaymentEvent parseWebhook(WebhookPayload payload);
 }
 ```
+
+Un adapter signale deux types d'échec : `PaymentProviderException` (fournisseur injoignable, issue inconnue → `503 PAYMENT_PROVIDER_UNAVAILABLE`, rejouable avec la même clé) et `PaymentRejectedException` (refus définitif).
 
 ```java
 @Component
@@ -404,7 +412,7 @@ ecom:
         read-timeout: 10s
 ```
 
-L'adapter PayPal est annoté `@ConditionalOnBooleanProperty("ecom.payment.providers.paypal.enabled")`. **Ajouter Stripe = créer `adapter/stripe/` + sa configuration**, sans toucher au domaine.
+La configuration PayPal (`PaypalConfiguration`) est annotée `@ConditionalOnBooleanProperty("ecom.payment.providers.paypal.enabled")` ; une fois activée, les identifiants sont obligatoires et validés au démarrage. **Ajouter Stripe = créer `adapter/stripe/` + sa configuration**, sans toucher au domaine.
 
 ### 5.2 Flux PayPal (Orders v2)
 
@@ -429,9 +437,14 @@ Client        ecom                         PayPal
 - **Statuts** : `INITIATED → PENDING_APPROVAL → CAPTURED` ; `FAILED`, `CANCELLED`, `REFUNDED`, `PARTIALLY_REFUNDED`.
 - **Idempotence** : chaque `PaymentAttempt` a une clé unique transmise à PayPal ; les webhooks sont dédoublonnés via `webhook_event.event_id` (contrainte unique).
 - **Webhooks** : signature vérifiée (`/v1/notifications/verify-webhook-signature`) avant tout traitement ; endpoint public (sans JWT) mais rejeté si la signature est invalide. Exposé via ALB/CloudFront sur `/api/webhooks/paypal`.
-- **Flux SPA** : la SPA appelle `POST /api/payments` → reçoit l'`orderId` PayPal → affiche les PayPal JS SDK Buttons → au `onApprove`, appelle `POST /api/payments/{id}/capture`. Le montant est **toujours** recalculé côté serveur à partir de la commande, jamais envoyé par la SPA.
-- **Réconciliation** : job `@Scheduled` qui interroge PayPal pour les paiements `PENDING_APPROVAL` > 15 min.
-- **Résilience** : timeouts explicites, retry uniquement sur erreurs réseau/5xx et toujours avec la même clé d'idempotence, circuit breaker.
+- **Flux SPA** : la page de la commande charge `GET /api/payments/methods` (client id PayPal), puis la SPA appelle `POST /api/payments` → reçoit l'`orderId` PayPal (`providerReference`) → affiche les PayPal JS SDK Buttons → au `onApprove`, appelle `POST /api/payments/{id}/capture`. Le montant est **toujours** recalculé côté serveur à partir de la commande, jamais envoyé par la SPA.
+- **Clés d'idempotence déterministes** : `initiate-{paymentId}` et `capture-{paymentId}` ; la capture peut venir du client, du webhook `CHECKOUT.ORDER.APPROVED` ou de la réconciliation, la même clé garantit qu'elle n'a lieu qu'une fois. Chaque appel est journalisé dans `payment_attempt` (opération, clé, issue).
+- **Pas de transaction pendant les appels HTTP** : chaque étape (création du `Payment`, appel fournisseur, application du résultat) committe séparément (`TransactionTemplate`) ; le résultat est appliqué en relisant le paiement, le premier chemin qui le règle gagne, les autres deviennent sans effet.
+- **Commande expirée ou annulée pendant l'approbation** : la capture n'est pas tentée (paiement `CANCELLED`) ; si l'argent a malgré tout été capturé (webhook), il est **remboursé automatiquement** (clé `compensation-{paymentId}`).
+- **Un seul paiement vivant par commande** (index unique partiel hors `FAILED`/`CANCELLED`) : un paiement refusé laisse la commande en `CREATED`, le client peut réessayer.
+- **Remboursements** : back-office `POST /api/admin/payments/{id}/refund` (total par défaut, partiel avec `amount`) ; les remboursements faits depuis le dashboard PayPal sont enregistrés via le webhook `PAYMENT.CAPTURE.REFUNDED`, dédoublonnés par id de remboursement. La commande passe `REFUNDED` quand il ne reste rien à rembourser.
+- **Réconciliation** : job `@Scheduled` (toutes les 5 min, `SKIP LOCKED` multi-instances) qui interroge PayPal pour les paiements ouverts depuis plus de 15 min : approuvé → capture, capturé → commande payée, abandonné sur une commande expirée → annulé.
+- **Résilience** : timeouts explicites (2 s connexion, 10 s lecture), 2 retries (backoff 200 ms ×2) uniquement sur erreurs réseau, 5xx, 429 et 401 (jeton renouvelé) avec la même clé d'idempotence (`RetryTemplate` de Spring Framework 7), circuit breaker Resilience4j (50 % d'échecs sur 20 appels → ouvert 30 s). Jeton OAuth2 mis en cache jusqu'à 1 min avant son expiration.
 - **Sécurité** : aucune donnée carte ne transite par le backend ; secrets PayPal dans le secrets manager du cloud.
 
 ---
@@ -448,51 +461,60 @@ management:
     web:
       exposure:
         include: health, info, prometheus
-  endpoint:
-    health:
-      probes:
-        enabled: true
   metrics:
     distribution:
       percentiles-histogram:
         http.server.requests: true
       slo:
-        http.server.requests: 100ms, 300ms, 1s
+        http.server.requests: 100ms, 300ms, 1s   # buckets exacts aux seuils des SLO
   tracing:
     sampling:
-      probability: 0.1                 # 1.0 en staging
+      probability: 0.1                 # 1.0 en local et en staging
   otlp:
+    metrics:
+      export:
+        enabled: false                 # métriques scrapées par Prometheus, pas poussées en OTLP
+  opentelemetry:
     tracing:
-      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+      export:
+        otlp:
+          endpoint: http://localhost:4318/v1/traces   # sidecar ADOT en AWS, Tempo en local
+    logging:
+      export:
+        otlp:
+          endpoint: http://localhost:3100/otlp/v1/logs # local uniquement (Loki)
 logging:
   structured:
     format:
-      console: ecs                     # logs JSON avec traceId/spanId
+      console: ecs                     # staging/prod : logs JSON avec traceId/spanId → CloudWatch
 ```
+
+- **Traces** : `spring-boot-starter-opentelemetry` (pont Micrometer Tracing → OpenTelemetry, export OTLP). Les requêtes `/actuator/**` (healthchecks, scrapes) ne produisent pas de trace (`ObservabilityConfig`).
+- **Exemplars** : chaque bucket de latence Prometheus porte un `trace_id` échantillonné ; dans Grafana, un point du graphe de latence ouvre la trace dans Tempo.
+- **Logs** : `traceId`/`spanId` dans chaque ligne (MDC). En local, l'appender Logback OpenTelemetry (`OpenTelemetryLogsConfig`, activé seulement si un endpoint OTLP de logs est défini) les envoie à Loki, où Grafana relie log ↔ trace.
+
+| URL locale (`compose.yaml`)  | Service                              |
+|------------------------------|--------------------------------------|
+| http://localhost:9090        | Prometheus (règles d'alerte chargées depuis `observability/alerts/`) |
+| http://localhost:3000        | Grafana : dashboards `ecom — API`, `ecom — Métier`, Explore Tempo/Loki |
+| http://localhost:3200        | Tempo (API)                          |
+| http://localhost:3100        | Loki (API)                           |
 
 ### 6.2 Métriques métier
 
-```java
-@Component
-public class PaymentMetrics {
+| Métrique (Prometheus)                    | Type      | Tags                                  | Source |
+|------------------------------------------|-----------|---------------------------------------|--------|
+| `ecom_page_views_total`                  | counter   | `page` (liste fermée `PageType`)      | `POST /api/telemetry/page-views` envoyé par la SPA à chaque navigation |
+| `ecom_payment_attempts_total`            | counter   | `provider`, `outcome` (`success`, `failed`, `cancelled`), `reason` | paiement arrivé à une issue définitive |
+| `ecom_payment_duration_seconds`          | histogram | `provider`, `operation` (`initiate`, `capture`, `retrieve`, `refund`), `outcome` (`succeeded`, `rejected`, `error`) | chaque appel au fournisseur |
+| `ecom_payment_webhooks_total`            | counter   | `provider`, `type`, `result` (`processed`, `duplicate`, `rejected`) | webhooks reçus |
+| `ecom_payment_refunds_total`             | counter   | `provider`                            | remboursements enregistrés |
+| `ecom_orders_placed_total`               | counter   | —                                     | checkout validé (après commit) |
+| `ecom_orders_expired_total`              | counter   | —                                     | commande non payée annulée à l'expiration de sa réservation : l'indicateur d'**abandon au paiement** (le panier lui-même n'est qu'une clé temporaire dans Valkey) |
 
-    private final MeterRegistry registry;
-
-    public PaymentMetrics(MeterRegistry registry) {
-        this.registry = registry;
-    }
-
-    public void recordAttempt(String provider, PaymentOutcome outcome, String reason) {
-        registry.counter("ecom.payment.attempts",
-                "provider", provider,
-                "outcome", outcome.name().toLowerCase(),
-                "reason", reason)          // valeurs bornées : ex. DECLINED, TIMEOUT, CANCELLED_BY_USER
-                .increment();
-    }
-}
-```
-
-> Attention à la **cardinalité** des tags : jamais d'identifiant client/commande comme tag.
+> Attention à la **cardinalité** des tags : jamais d'identifiant client/commande comme tag. Les raisons d'échec sont les codes du fournisseur (`INSTRUMENT_DECLINED`…) ; toute autre valeur devient `OTHER`. Les pages vues sont une liste fermée : une valeur inconnue est refusée (400).
+>
+> Ne pas nommer un compteur `*.created` : le client Prometheus retire ce suffixe, réservé par OpenMetrics.
 
 ### 6.3 Indicateurs demandés (PromQL)
 
@@ -501,13 +523,12 @@ public class PaymentMetrics {
 | Temps de réponse p95 par endpoint           | `histogram_quantile(0.95, sum by (le, uri) (rate(http_server_requests_seconds_bucket[5m])))`                            |
 | Requêtes par seconde par endpoint           | `sum by (uri) (rate(http_server_requests_seconds_count[1m]))`                                                           |
 | Pages vues par minute                       | `sum by (page) (rate(ecom_page_views_total[5m])) * 60`                                                                  |
+| Taux d'abandon au paiement                  | `sum(increase(ecom_orders_expired_total[1d])) / sum(increase(ecom_orders_placed_total[1d]))`                            |
 | Taux de paiements échoués                   | `sum(rate(ecom_payment_attempts_total{outcome="failed"}[15m])) / sum(rate(ecom_payment_attempts_total[15m]))`           |
 | Taux d'échec par fournisseur                | `sum by (provider) (rate(ecom_payment_attempts_total{outcome="failed"}[15m])) / sum by (provider) (rate(ecom_payment_attempts_total[15m]))` |
 | Taux d'erreurs 5xx                          | `sum(rate(http_server_requests_seconds_count{status=~"5.."}[5m])) / sum(rate(http_server_requests_seconds_count[5m]))`  |
 
-> Avec une SPA, le serveur ne voit pas les changements de page (routage côté client). Deux options :
-> - la SPA envoie un événement `POST /api/telemetry/page-view` (`{page: "product"}`, valeurs bornées) qui incrémente `ecom.page.views` → tout reste dans Prometheus/Grafana ;
-> - ou un outil d'analytics respectueux du RGPD (Matomo, Plausible).
+> Avec une SPA, le serveur ne voit pas les changements de page (routage côté client) : la SPA envoie `POST /api/telemetry/page-views` (`{"page": "PRODUCT"}`) à chaque navigation (`PageViewTracker`). Seul le type de page est transmis, jamais l'URL ni l'identité du visiteur. L'endpoint est public : un rate limiting AWS WAF le protégera de l'inflation artificielle (étape 9).
 >
 > Côté navigateur, mesurer aussi les **Core Web Vitals** (LCP, INP, CLS) — par ex. via CloudWatch RUM.
 
@@ -518,14 +539,23 @@ public class PaymentMetrics {
 - **Amazon Managed Grafana** utilise Managed Prometheus, X-Ray et CloudWatch comme sources de données.
 - Alarmes d'infrastructure (CPU ECS, connexions RDS, 5xx ALB) dans CloudWatch ; alertes métier dans Grafana/Prometheus.
 
-### 6.5 Alertes (exemples)
+### 6.5 Alertes
 
-- Taux d'échec paiement > 5 % sur 15 min → critique
-- p95 > 300 ms sur 10 min → warning
-- Taux 5xx > 1 % sur 5 min → critique
-- Aucun webhook PayPal reçu depuis 1 h alors que des paiements sont initiés → warning
+Règles Prometheus versionnées dans `observability/alerts/ecom.yml`, testées avec `promtool test rules` (`observability/alerts/tests/`) :
 
-Dashboards et règles versionnés dans `observability/` et provisionnés automatiquement.
+| Alerte                          | Condition                                                                 | Sévérité |
+|---------------------------------|---------------------------------------------------------------------------|----------|
+| `EcomDown`                      | cible de scrape injoignable depuis 1 min                                  | critique |
+| `EcomHighErrorRate`             | > 1 % de 5xx sur 5 min                                                    | critique |
+| `EcomSlowResponses`             | p95 > 300 ms pendant 10 min                                               | warning  |
+| `EcomPaymentFailureRateHigh`    | > 5 % de paiements refusés sur 15 min (au moins 10 paiements), par fournisseur | critique |
+| `EcomPaymentProviderErrors`     | appels au fournisseur en erreur (injoignable, 5xx) pendant 5 min          | critique |
+| `EcomPaymentWebhooksRejected`   | > 5 webhooks à signature invalide en 15 min                               | warning  |
+| `EcomPaymentWebhooksMissing`    | paiements initiés mais aucun webhook depuis 1 h                           | warning  |
+
+En local, Prometheus évalue les règles (onglet *Alerts*) sans Alertmanager. En AWS, elles sont chargées dans Amazon Managed Prometheus, qui notifie via SNS (étape 7).
+
+Dashboards Grafana versionnés dans `observability/grafana/dashboards/` et provisionnés automatiquement : **ecom — API** (SLO, latence p50/p95/p99 avec exemplars, trafic par endpoint, statuts, ressources) et **ecom — Métier** (paiements, appels fournisseur, webhooks, commandes, abandon, pages vues). Modifier un dashboard dans Grafana puis exporter son JSON dans le dépôt.
 
 ---
 
@@ -533,51 +563,39 @@ Dashboards et règles versionnés dans `observability/` et provisionnés automat
 
 ### 7.1 Workflows
 
-| Fichier                 | Déclencheur                    | Contenu                                                                                     |
-|-------------------------|--------------------------------|---------------------------------------------------------------------------------------------|
-| `ci.yml`                | PR + push `main`               | build, tests unitaires + intégration (Testcontainers), JaCoCo, Spotless, SpotBugs, CodeQL, Trivy (deps), build image + scan |
-| `frontend-ci.yml`       | PR modifiant `frontend/**`     | `ng lint`, `ng test`, `ng build --configuration production`, `npm audit` / Trivy                                           |
-| `infra-ci.yml`          | PR modifiant `infra/**`        | `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`, `tofu plan` posté en commentaire de PR |
-| `cd.yml`                | push `main`                    | push image ECR (tag SHA) + cosign + SBOM → `tofu apply` staging → mise à jour du service ECS → SPA vers S3 + invalidation CloudFront → smoke/E2E → approbation → prod |
-| `drift.yml`             | planifié (quotidien)           | `tofu plan -detailed-exitcode` par environnement, alerte en cas de dérive                   |
+| Fichier          | Déclencheur                         | Contenu |
+|------------------|-------------------------------------|---------|
+| `ci.yml`         | PR + push `main`/`dev`              | jobs parallèles, détaillés ci-dessous |
+| `codeql.yml`     | PR + push + hebdomadaire            | CodeQL `security-extended` : Java, TypeScript, workflows GitHub Actions |
+| `infra-ci.yml`   | PR modifiant `infra/**`             | `tofu fmt -check`, `tofu validate` (sans backend), `tflint`, `trivy config` ; `tofu plan` de chaque environnement commenté dans la PR (rôle en lecture seule via OIDC) |
+| `cd.yml`         | push `main`, manuel                 | build unique de l'image (archive + digest) et de la SPA, puis `deploy.yml` en staging, puis en production après approbation |
+| `deploy.yml`     | appelé par `cd.yml`                 | push ECR (tag `sha-<commit>`, digest vérifié) + signature cosign + attestation SBOM → `tofu apply` → attente du déploiement ECS (échec si rollback) → SPA vers S3 + invalidation CloudFront → smoke tests |
+| `drift.yml`      | planifié (quotidien), manuel        | `tofu plan -detailed-exitcode` par environnement (rôle lecture seule) ; échec en cas de dérive |
+| `release.yml`    | push `main` (étape 8)               | release-please : tag SemVer + changelog |
 
-Filtrage par chemins (`paths:`) pour ne lancer que les workflows concernés dans le monorepo.
-| `release.yml`           | push `main`                    | release-please : tag SemVer + changelog                                                     |
+Jobs de `ci.yml` :
+
+| Job                                         | Contenu | Bloquant |
+|---------------------------------------------|---------|----------|
+| **Backend (build & tests)**                 | `./mvnw verify` : Spotless (imports, espaces), tests unitaires + intégration (Testcontainers, WireMock), SpotBugs + FindSecBugs, couverture JaCoCo fusionnée (seuils : 80 % des lignes, 70 % des branches), résumé de couverture dans la PR | oui (ruleset) |
+| **Frontend (lint, test, build)**            | `npm audit` (high), ESLint, Vitest, build de production | oui (ruleset) |
+| API client up to date                       | régénère le client Angular depuis l'OpenAPI écrit par `EcomApplicationIT` et échoue s'il diffère du client commité | oui |
+| Security (dependencies & secrets)           | Trivy `sbom` sur le SBOM CycloneDX généré par Maven (arbre exact des dépendances, sans requêtes vers Maven Central qui limite les runners partagés), Trivy `fs` pour npm, secrets et misconfigurations → onglet Security (SARIF) ; échec sur HIGH/CRITICAL corrigeable ou secret | oui |
+| Image OCI (build & scan)                    | `spring-boot:build-image` (Buildpacks Paketo) + Trivy `image` → SARIF ; échec sur CRITICAL corrigeable | oui |
+| Observability (alert rules & dashboards)    | `promtool check rules` + `promtool test rules`, validité des dashboards | oui |
+
+Le frontend reste dans `ci.yml` plutôt que dans un workflow filtré par chemins : un check obligatoire d'un workflow non déclenché resterait « en attente » et bloquerait les PR qui ne touchent pas `frontend/`. `infra-ci.yml` est filtré par chemins et n'est donc pas obligatoire.
+
+En local : `./mvnw verify` exécute les mêmes contrôles que le job backend ; `./mvnw spotless:apply` corrige l'ordre des imports. Les faux positifs SpotBugs sont écartés dans `spotbugs-exclude.xml`, chaque exclusion étant justifiée.
 
 ### 7.2 Bonnes pratiques
 
-- Actions tierces **épinglées par SHA** de commit (mises à jour via Dependabot).
+- Actions tierces **épinglées par SHA** de commit (mises à jour via Dependabot). Les images d'outils lancées par `docker run` (Trivy, promtool) sont épinglées par digest dans `env:` ; Dependabot ne les suit pas, elles sont mises à jour à la main.
 - `permissions:` minimales par workflow (`contents: read` par défaut, `id-token: write` seulement pour l'OIDC).
 - Authentification AWS par **OIDC** (`aws-actions/configure-aws-credentials` + `role-to-assume`) — aucune clé d'accès AWS dans les secrets GitHub. La politique de confiance du rôle restreint `token.actions.githubusercontent.com:sub` au repo **et** à l'environnement (`repo:<owner>/ecom:environment:production`).
 - Environnements GitHub `staging` / `production` avec reviewers obligatoires et secrets par environnement.
 - `concurrency:` pour empêcher deux déploiements simultanés du même environnement.
 - La même image (même digest) est promue de staging vers production — jamais reconstruite.
-
-### 7.3 Squelette `ci.yml`
-
-```yaml
-name: CI
-on:
-  pull_request:
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@<sha>
-      - uses: actions/setup-java@<sha>
-        with:
-          distribution: temurin
-          java-version: '25'
-          cache: maven
-      - run: ./mvnw -B verify          # surefire + failsafe + jacoco + spotless + spotbugs
-      - run: ./mvnw -B spring-boot:build-image -DskipTests
-```
 
 ---
 
@@ -589,15 +607,16 @@ jobs:
 infra/
 ├── bootstrap/           # bucket S3 d'état + clé KMS + OIDC GitHub (appliqué une fois)
 ├── modules/
+│   ├── platform/        # un environnement complet, seul module appelé par envs/*
 │   ├── network/         # VPC, sous-réseaux, NAT, VPC endpoints
 │   ├── database/        # RDS PostgreSQL, backups, chiffrement KMS
 │   ├── cache/           # ElastiCache Valkey/Redis
 │   ├── registry/        # ECR
 │   ├── backend/         # ECS cluster, service Fargate, ALB, autoscaling, rôles IAM de tâche
 │   ├── frontend/        # S3 + CloudFront (OAC)
-│   ├── edge/            # Route 53, ACM, WAF
+│   ├── edge/            # ACM et WAF de CloudFront (us-east-1)
 │   ├── identity/        # Cognito user pool + client SPA
-│   ├── secrets/         # Secrets Manager (PayPal, BDD)
+│   ├── secrets/         # Secrets Manager (PayPal ; BDD via le secret géré par RDS)
 │   └── observability/   # Managed Prometheus, Managed Grafana, CloudWatch
 └── envs/
     ├── staging/
@@ -606,6 +625,8 @@ infra/
     │   └── terraform.tfvars
     └── production/
 ```
+
+Procédure d'amorçage et de premier déploiement : [infra/README.md](../infra/README.md).
 
 ### 8.2 Règles
 
@@ -619,17 +640,17 @@ infra/
 
 ```hcl
 terraform {
-  required_version = "~> 1.10"
+  required_version = ">= 1.10"
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.0"
+      version = "~> 6.68.0"
     }
   }
 
+  # bucket fourni à l'init : tofu init -backend-config="bucket=ecom-tofu-state-<account-id>"
   backend "s3" {
-    bucket       = "ecom-tofu-state-<account-id>"
     key          = "staging/terraform.tfstate"
     region       = "eu-west-3"
     encrypt      = true
@@ -646,10 +667,12 @@ terraform {
       keys = key_provider.aws_kms.main
     }
     state {
-      method = method.aes_gcm.main
+      method   = method.aes_gcm.main
+      enforced = true
     }
     plan {
-      method = method.aes_gcm.main
+      method   = method.aes_gcm.main
+      enforced = true
     }
   }
 }

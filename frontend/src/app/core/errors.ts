@@ -12,6 +12,14 @@ const BUSINESS_MESSAGES: Record<string, string> = {
   STOCK_BELOW_RESERVED: 'Le stock ne peut pas être inférieur aux unités déjà réservées.',
   CONCURRENT_MODIFICATION: 'Les données ont été modifiées entre-temps, veuillez réessayer.',
   CONFLICT: 'Cette valeur existe déjà (SKU ou slug en double ?).',
+  ORDER_ALREADY_PAID: 'Cette commande est déjà payée.',
+  ORDER_NOT_PAYABLE: "Cette commande n'est plus payable (annulée ou expirée).",
+  PAYMENT_REJECTED: 'Le paiement a été refusé par le prestataire.',
+  PAYMENT_PROVIDER_UNAVAILABLE: 'Le service de paiement est momentanément indisponible, veuillez réessayer.',
+  UNSUPPORTED_PAYMENT_METHOD: "Ce moyen de paiement n'est pas disponible.",
+  INVALID_PAYMENT_STATE: "Cette opération n'est plus possible pour ce paiement.",
+  REFUND_EXCEEDS_PAYMENT: 'Le montant dépasse ce qui reste à rembourser.',
+  REFUND_REJECTED: 'Le remboursement a été refusé par le prestataire.',
 };
 
 export function errorMessage(error: unknown): string {
@@ -33,6 +41,8 @@ export function errorMessage(error: unknown): string {
       return "Vous n'avez pas les droits nécessaires.";
     case 404:
       return 'Élément introuvable.';
+    case 503:
+      return 'Service momentanément indisponible, veuillez réessayer.';
     default:
       return 'Une erreur est survenue, veuillez réessayer.';
   }

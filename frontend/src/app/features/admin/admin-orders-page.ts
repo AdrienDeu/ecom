@@ -6,6 +6,8 @@ import { adminOrderCancel } from '../../api/fn/admin-order-controller/admin-orde
 import { adminOrderDeliver } from '../../api/fn/admin-order-controller/admin-order-deliver';
 import { adminOrderList } from '../../api/fn/admin-order-controller/admin-order-list';
 import { adminOrderShip } from '../../api/fn/admin-order-controller/admin-order-ship';
+import { adminPaymentList } from '../../api/fn/admin-payment-controller/admin-payment-list';
+import { adminPaymentRefund } from '../../api/fn/admin-payment-controller/admin-payment-refund';
 import { OrderView } from '../../api/models/order-view';
 import { errorMessage } from '../../core/errors';
 import { isCancellable, ORDER_STATUS_LABELS, ORDER_STATUSES, OrderStatus } from '../../core/labels';
@@ -58,6 +60,9 @@ const ACTIONS = { ship: adminOrderShip, deliver: adminOrderDeliver, cancel: admi
                   @if (cancellable(o.status)) {
                     <button type="button" class="btn danger" [disabled]="busy()" (click)="act(o, 'cancel')">Annuler</button>
                   }
+                  @if (refundable(o.status)) {
+                    <button type="button" class="btn danger" [disabled]="busy()" (click)="refund(o)">Rembourser</button>
+                  }
                   </div>
                 </td>
               </tr>
@@ -93,15 +98,41 @@ export class AdminOrdersPage {
     loader: ({ params }) => this.api.invoke(adminOrderList, { ...params, size: 100 }),
   });
 
+  protected refundable(status: OrderStatus): boolean {
+    return status === 'PAID' || status === 'SHIPPED' || status === 'DELIVERED';
+  }
+
   protected filter(status: string): void {
     this.router.navigate([], { queryParams: { status: status || null } });
   }
 
-  protected async act(order: OrderView, action: Action): Promise<void> {
+  protected act(order: OrderView, action: Action): Promise<void> {
+    return this.run(async () => {
+      await this.api.invoke(ACTIONS[action], { id: order.id });
+    });
+  }
+
+  /** Refunds whatever remains of the order's payment; partial refunds go through the API. */
+  protected refund(order: OrderView): Promise<void> {
+    return this.run(async () => {
+      const payments = await this.api.invoke(adminPaymentList, { orderId: order.id });
+      const payment = payments.find((p) => p.status === 'CAPTURED' || p.status === 'PARTIALLY_REFUNDED');
+      if (!payment) {
+        this.error.set('Aucun paiement remboursable pour cette commande.');
+        return;
+      }
+      if (!confirm(`Rembourser la commande ${order.reference} au client ?`)) {
+        return;
+      }
+      await this.api.invoke(adminPaymentRefund, { id: payment.id, body: {} });
+    });
+  }
+
+  private async run(action: () => Promise<void>): Promise<void> {
     this.busy.set(true);
     this.error.set(null);
     try {
-      await this.api.invoke(ACTIONS[action], { id: order.id });
+      await action();
       this.orders.reload();
     } catch (error) {
       this.error.set(errorMessage(error));
