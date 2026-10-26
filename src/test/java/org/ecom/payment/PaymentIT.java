@@ -19,10 +19,10 @@ import java.time.Duration;
 import java.util.UUID;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
-import io.micrometer.core.instrument.MeterRegistry;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.ecom.ApiTestSupport;
 import org.ecom.IntegrationTest;
 import org.ecom.inventory.InventoryService;

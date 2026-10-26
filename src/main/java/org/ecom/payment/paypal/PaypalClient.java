@@ -119,6 +119,9 @@ class PaypalClient {
             // Wrong credentials: not worth retrying, and not the caller's operation being refused
             throw new PaymentProviderException("PayPal authentication failed with " + e.getStatusCode(), e);
         }
+        if (response == null) {
+            throw new PaymentProviderException("PayPal returned an empty token response", null);
+        }
         var expiresIn = Duration.ofSeconds(response.path("expires_in").asLong());
         return new AccessToken(response.path("access_token").asString(), clock.instant().plus(expiresIn).minus(TOKEN_EXPIRY_MARGIN));
     }

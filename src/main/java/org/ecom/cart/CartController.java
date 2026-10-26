@@ -1,5 +1,7 @@
 package org.ecom.cart;
 
+import static org.springframework.http.HttpStatus.UNAUTHORIZED;
+
 import java.util.UUID;
 import java.util.function.Function;
 
@@ -22,8 +24,6 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
-
-import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 /**
  * Signed-in customers get their own cart. Guests are identified by the {@code X-Cart-Id} header: the server

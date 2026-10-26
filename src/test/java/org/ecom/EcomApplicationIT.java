@@ -7,11 +7,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
 import com.jayway.jsonpath.JsonPath;
-
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalManagementPort;
@@ -88,6 +89,18 @@ class EcomApplicationIT {
         assertThat(paths).doesNotContainKey("/api/webhooks/{provider}");
         Map<String, Object> categoryView = document.read("$.components.schemas.CategoryView");
         assertThat(categoryView).doesNotContainKey("nullable");
+    }
+
+    /**
+     * Writes the document the Angular client is generated from; CI regenerates the client from it and fails if the
+     * committed one differs. The server URL is the local backend's, as with {@code npm run generate:api}.
+     */
+    @Test
+    void writesOpenApiDocumentForClientGeneration() throws Exception {
+        var document = JsonPath.parse(get(port, "/api/openapi").body())
+                .set("$.servers", List.of(Map.of("url", "http://localhost:8080", "description", "Generated server url")));
+
+        Files.writeString(Path.of("target", "openapi.json"), document.jsonString());
     }
 
     private HttpResponse<String> get(int port, String path) throws IOException, InterruptedException {
