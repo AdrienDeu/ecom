@@ -1,0 +1,8 @@
+{
+  "oidc": {
+    "authority": "http://localhost:9000/ecom",
+    "clientId": "ecom-local",
+    "scope": "openid profile email",
+    "logoutUrl": null
+  }
+}

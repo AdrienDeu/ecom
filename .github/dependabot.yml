@@ -1,0 +1,61 @@
+version: 2
+
+updates:
+  - package-ecosystem: maven
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      spring:
+        patterns: ["org.springframework*"]
+      maven-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci(deps)"
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "build(deps)"
+    groups:
+      angular:
+        patterns: ["@angular/*", "@angular-devkit/*", "@schematics/angular", "angular-eslint", "@angular-eslint/*"]
+      npm-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker-compose
+    directory: /
+    target-branch: dev
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "build(deps)"
+
+  # À activer quand infra/ contiendra des fichiers .tf :
+  #
+  # - package-ecosystem: terraform   # lit les fichiers .tf d'OpenTofu
+  #   directories: ["/infra/envs/*", "/infra/modules/*", "/infra/bootstrap"]
+  #   target-branch: dev
+  #   schedule:
+  #     interval: weekly
+  #   commit-message:
+  #     prefix: "build(deps)"

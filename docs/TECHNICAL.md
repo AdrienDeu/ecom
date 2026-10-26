@@ -229,16 +229,21 @@ org.ecom
 | `@angular/*` (dernière version stable)  | Framework (standalone components, signals, routing lazy)   |
 | `angular-auth-oidc-client`              | OIDC Authorization Code + PKCE avec Cognito, refresh token |
 | `@paypal/paypal-js`                     | Chargement du PayPal JS SDK (boutons PayPal)               |
-| `@openapitools/openapi-generator-cli` *(dev)* | Génération du client API typé depuis l'OpenAPI backend |
+| `ng-openapi-gen` *(dev)*                | Génération des services Angular typés depuis l'OpenAPI backend (pur Node, pas de JVM requise) |
 | `angular-eslint` + `eslint` *(dev)*     | Lint                                                       |
-| Vitest *(dev, runner par défaut des versions récentes d'Angular)* | Tests unitaires                  |
+| `vitest` + `jsdom` *(dev)*              | Tests unitaires (runner par défaut d'Angular)              |
 | `@playwright/test` *(dev)*              | Tests E2E (exécutés en CD contre staging)                  |
 
-Organisation : `core/` (auth, interceptors, config), `features/{catalog,cart,checkout,account,admin}/` en lazy loading, `shared/`, `api/` (client généré, non édité à la main).
+Organisation : `core/` (auth, panier, config, erreurs, guards), `features/{catalog,cart,checkout,account,admin,auth}/` en lazy loading, `api/` (client généré, non édité à la main, exclu du lint).
 
-- Un **interceptor HTTP** ajoute le jeton d'accès sur `/api/**` uniquement.
-- **Guards** de route : `authGuard` (compte, checkout), `adminGuard` (groupe `ADMIN`).
-- Configuration par environnement (`issuer`, `clientId`, `paypalClientId`) chargée au démarrage depuis `/config.json`, pour promouvoir le **même build** de staging à production.
+- Composants standalone, **signals** et `resource()` pour les chargements, formulaires réactifs, locale `fr-FR`.
+- L'interceptor `authInterceptor()` de la bibliothèque OIDC ajoute le jeton d'accès sur `/api/**` uniquement (`secureRoutes`).
+- **Guards** de route : `authGuard` (compte, checkout → redirection vers Cognito puis retour à la page demandée), `adminGuard` (groupe `ADMIN` ; confort d'affichage uniquement, l'API applique le contrôle).
+- Configuration par environnement chargée au démarrage depuis **`/config.json`** (`oidc.authority`, `oidc.clientId`, `oidc.scope`, `oidc.logoutUrl`) : le **même build** est promu de staging à production, seul ce fichier change (écrit au déploiement). En local il pointe vers le serveur OIDC de test.
+- **Panier invité** : l'`X-Cart-Id` renvoyé par l'API est conservé en `localStorage` ; à la connexion, la page `/auth/callback` appelle `POST /api/cart/merge` puis renvoie vers la page demandée (`triggerAuthorizationResultEvent: true` désactive la redirection automatique de la bibliothèque).
+- **Jetons** : stockés en `sessionStorage` (stockage par défaut de la bibliothèque, perdu à la fermeture de l'onglet), jamais en `localStorage` ; renouvellement par refresh token. L'URL de retour après login n'accepte que des chemins internes (pas d'open redirect).
+- **Déconnexion Cognito** : Cognito ne publie pas d'`end_session_endpoint` ; `oidc.logoutUrl` (`https://<domaine>.auth.eu-west-3.amazoncognito.com/logout?client_id=…&logout_uri=…`) est utilisé après une déconnexion locale.
+- **Client API** : `npm run generate:api` régénère `src/app/api` depuis `http://localhost:8080/api/openapi` (backend lancé). Le backend garantit des `operationId` uniques (`<controller><Méthode>`) et marque les propriétés de réponse non nulles comme `required` ; un test d'intégration protège ce contrat.
 
 ### 3.2 Cognito
 
@@ -274,7 +279,7 @@ SecurityFilterChain api(HttpSecurity http) throws Exception {
                     .anyRequest().authenticated())
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt
                     .jwtAuthenticationConverter(cognitoGroupsConverter())))
-            .csrf(AbstractHttpConfigurer::disable)   // API stateless par Bearer token
+            .csrf(CsrfConfigurer::spa)   // cookie XSRF-TOKEN + en-tête X-XSRF-TOKEN, géré nativement par Angular
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .build();
 }
@@ -292,14 +297,48 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 
 + un `OAuth2TokenValidator<Jwt>` qui vérifie `token_use == "access"` et `client_id == ecom.security.cognito-client-id`.
 
+**CSRF** : mode SPA de Spring Security (double-submit cookie). Le serveur pose le cookie `XSRF-TOKEN`, le `HttpClient` d'Angular le renvoie dans l'en-tête `X-XSRF-TOKEN` sur les requêtes même origine. Les requêtes authentifiées par bearer token en sont exemptées par Spring Security (le jeton n'est pas envoyé automatiquement par le navigateur) ; les requêtes anonymes qui modifient l'état (panier invité) exigent le jeton. Les webhooks PayPal (étape 4) devront être explicitement exclus, leur authenticité étant vérifiée par signature.
+
 ---
 
 ## 4. Persistance
 
-- Schéma géré **uniquement** par Flyway (`spring.jpa.hibernate.ddl-auto=validate`) — scripts dans `src/main/resources/db/migration/V1__init.sql`, etc.
-- Montants stockés en `NUMERIC(19,4)` + code devise ISO 4217 (jamais de `double`).
-- Verrouillage optimiste (`@Version`) sur `Order`, `Payment`, `Stock`.
-- Tables principales : `product`, `category`, `stock`, `customer`, `address`, `cart`, `cart_item`, `customer_order`, `order_line`, `payment`, `payment_attempt`, `webhook_event`.
+- Schéma géré **uniquement** par Flyway (`spring.jpa.hibernate.ddl-auto=validate`) — scripts dans `src/main/resources/db/migration/`. Une migration déjà mergée n'est jamais modifiée.
+- Montants : `Money` (record embarqué) stocké en `NUMERIC(19,4)` + code devise ISO 4217, arrondi au centime (`HALF_EVEN`) ; jamais de `double`.
+- Identifiants UUID v7 (triables dans le temps, générés par Hibernate).
+- Verrouillage optimiste (`@Version`) sur `product`, `stock`, `customer_order` ; un conflit renvoie `409 CONCURRENT_MODIFICATION`.
+- Les clients sont identifiés par le `sub` Cognito (`customer_id`) : pas de table client, les identités vivent dans Cognito.
+- Les paniers ne sont pas en base : JSON dans Valkey/Redis (`cart:guest:<uuid>`, `cart:customer:<sub>`), TTL 30 jours.
+
+| Migration | Tables |
+|-----------|--------|
+| `V1__catalog_and_inventory.sql` | `category`, `product`, `stock` (`on_hand`, `reserved`, contrainte `reserved <= on_hand`) |
+| `V2__customer_address.sql` | `address` |
+| `V3__orders.sql` | `customer_order` (statut, total, adresse figée, `expires_at`), `order_line` (snapshot sku/nom/prix) |
+
+### 4.1 Stock et réservations
+
+- `available = on_hand - reserved`.
+- **Checkout** : chaque ligne fait un `UPDATE stock SET reserved = reserved + q WHERE on_hand - reserved >= q` ; 0 ligne modifiée → `409 INSUFFICIENT_STOCK` et rollback de toute la commande. Le verrou de ligne PostgreSQL rend la survente impossible, sans verrou applicatif.
+- **Paiement** (`PAID`) : `on_hand -= q`, `reserved -= q`.
+- **Annulation / expiration** : `reserved -= q`. Le job `OrderExpiryJob` (chaque minute) annule les commandes non payées après `ecom.order.reservation-ttl` (30 min) ; `FOR UPDATE SKIP LOCKED` permet de le faire tourner sur plusieurs tâches ECS sans double traitement.
+
+### 4.2 API REST
+
+| Méthode & chemin | Accès | Rôle |
+|---|---|---|
+| `GET /api/catalog/products?category=&q=&page=&size=&sort=` | public | Liste paginée des produits actifs |
+| `GET /api/catalog/products/{slug}` | public | Fiche produit |
+| `GET /api/catalog/categories` | public | Catégories |
+| `GET\|POST /api/cart`, `/api/cart/items[/{productId}]` | public (`X-Cart-Id`) ou client | Panier |
+| `POST /api/cart/merge` | client | Fusion du panier invité (`X-Cart-Id`) |
+| `GET\|POST\|PUT\|DELETE /api/me/addresses[/{id}]` | client | Adresses |
+| `POST /api/orders` | client | Checkout du panier (`{addressId}`) |
+| `GET /api/orders[/{id}]`, `POST /api/orders/{id}/cancel` | client | Commandes du client |
+| `/api/admin/categories`, `/api/admin/products[/{id}[/stock]]` | `ADMIN` | Back-office catalogue et stock |
+| `GET /api/admin/orders?status=`, `POST /api/admin/orders/{id}/{ship\|deliver\|cancel}` | `ADMIN` | Back-office commandes |
+
+Erreurs : `ProblemDetail` ; les erreurs métier (409) portent un champ `code` stable (`INSUFFICIENT_STOCK`, `EMPTY_CART`, `INVALID_STATUS_TRANSITION`, `QUANTITY_TOO_HIGH`…) que la SPA peut traduire. Les ressources d'un autre client renvoient 404 (et non 403) pour ne pas révéler leur existence.
 
 ---
 
@@ -315,18 +354,26 @@ public interface PaymentProvider {
     /** Identifiant stable : "paypal", "stripe"... */
     String id();
 
-    /** Initie le paiement ; renvoie éventuellement une URL de redirection/approbation. */
+    /** Paramètres publics nécessaires à la SPA (ex. client id PayPal), jamais de secret. */
+    Map<String, String> clientSettings();
+
+    /** Crée le paiement chez le fournisseur, à faire approuver par le client. */
     PaymentInitiation initiate(PaymentRequest request);
 
     /** Finalise le paiement (capture) après approbation du client. */
-    PaymentResult capture(PaymentReference reference);
+    PaymentResult capture(PaymentReference reference, String idempotencyKey);
 
-    PaymentResult refund(PaymentReference reference, Money amount);
+    /** État du paiement chez le fournisseur (job de réconciliation). */
+    PaymentResult retrieve(PaymentReference reference);
 
-    /** Vérifie et traduit un webhook fournisseur en événement de domaine. */
+    RefundResult refund(PaymentReference reference, Money amount, String idempotencyKey);
+
+    /** Vérifie et traduit un webhook fournisseur en événement indépendant du fournisseur. */
     PaymentEvent parseWebhook(WebhookPayload payload);
 }
 ```
+
+Un adapter signale deux types d'échec : `PaymentProviderException` (fournisseur injoignable, issue inconnue → `503 PAYMENT_PROVIDER_UNAVAILABLE`, rejouable avec la même clé) et `PaymentRejectedException` (refus définitif).
 
 ```java
 @Component
@@ -365,7 +412,7 @@ ecom:
         read-timeout: 10s
 ```
 
-L'adapter PayPal est annoté `@ConditionalOnBooleanProperty("ecom.payment.providers.paypal.enabled")`. **Ajouter Stripe = créer `adapter/stripe/` + sa configuration**, sans toucher au domaine.
+La configuration PayPal (`PaypalConfiguration`) est annotée `@ConditionalOnBooleanProperty("ecom.payment.providers.paypal.enabled")` ; une fois activée, les identifiants sont obligatoires et validés au démarrage. **Ajouter Stripe = créer `adapter/stripe/` + sa configuration**, sans toucher au domaine.
 
 ### 5.2 Flux PayPal (Orders v2)
 
@@ -390,9 +437,14 @@ Client        ecom                         PayPal
 - **Statuts** : `INITIATED → PENDING_APPROVAL → CAPTURED` ; `FAILED`, `CANCELLED`, `REFUNDED`, `PARTIALLY_REFUNDED`.
 - **Idempotence** : chaque `PaymentAttempt` a une clé unique transmise à PayPal ; les webhooks sont dédoublonnés via `webhook_event.event_id` (contrainte unique).
 - **Webhooks** : signature vérifiée (`/v1/notifications/verify-webhook-signature`) avant tout traitement ; endpoint public (sans JWT) mais rejeté si la signature est invalide. Exposé via ALB/CloudFront sur `/api/webhooks/paypal`.
-- **Flux SPA** : la SPA appelle `POST /api/payments` → reçoit l'`orderId` PayPal → affiche les PayPal JS SDK Buttons → au `onApprove`, appelle `POST /api/payments/{id}/capture`. Le montant est **toujours** recalculé côté serveur à partir de la commande, jamais envoyé par la SPA.
-- **Réconciliation** : job `@Scheduled` qui interroge PayPal pour les paiements `PENDING_APPROVAL` > 15 min.
-- **Résilience** : timeouts explicites, retry uniquement sur erreurs réseau/5xx et toujours avec la même clé d'idempotence, circuit breaker.
+- **Flux SPA** : la page de la commande charge `GET /api/payments/methods` (client id PayPal), puis la SPA appelle `POST /api/payments` → reçoit l'`orderId` PayPal (`providerReference`) → affiche les PayPal JS SDK Buttons → au `onApprove`, appelle `POST /api/payments/{id}/capture`. Le montant est **toujours** recalculé côté serveur à partir de la commande, jamais envoyé par la SPA.
+- **Clés d'idempotence déterministes** : `initiate-{paymentId}` et `capture-{paymentId}` ; la capture peut venir du client, du webhook `CHECKOUT.ORDER.APPROVED` ou de la réconciliation, la même clé garantit qu'elle n'a lieu qu'une fois. Chaque appel est journalisé dans `payment_attempt` (opération, clé, issue).
+- **Pas de transaction pendant les appels HTTP** : chaque étape (création du `Payment`, appel fournisseur, application du résultat) committe séparément (`TransactionTemplate`) ; le résultat est appliqué en relisant le paiement, le premier chemin qui le règle gagne, les autres deviennent sans effet.
+- **Commande expirée ou annulée pendant l'approbation** : la capture n'est pas tentée (paiement `CANCELLED`) ; si l'argent a malgré tout été capturé (webhook), il est **remboursé automatiquement** (clé `compensation-{paymentId}`).
+- **Un seul paiement vivant par commande** (index unique partiel hors `FAILED`/`CANCELLED`) : un paiement refusé laisse la commande en `CREATED`, le client peut réessayer.
+- **Remboursements** : back-office `POST /api/admin/payments/{id}/refund` (total par défaut, partiel avec `amount`) ; les remboursements faits depuis le dashboard PayPal sont enregistrés via le webhook `PAYMENT.CAPTURE.REFUNDED`, dédoublonnés par id de remboursement. La commande passe `REFUNDED` quand il ne reste rien à rembourser.
+- **Réconciliation** : job `@Scheduled` (toutes les 5 min, `SKIP LOCKED` multi-instances) qui interroge PayPal pour les paiements ouverts depuis plus de 15 min : approuvé → capture, capturé → commande payée, abandonné sur une commande expirée → annulé.
+- **Résilience** : timeouts explicites (2 s connexion, 10 s lecture), 2 retries (backoff 200 ms ×2) uniquement sur erreurs réseau, 5xx, 429 et 401 (jeton renouvelé) avec la même clé d'idempotence (`RetryTemplate` de Spring Framework 7), circuit breaker Resilience4j (50 % d'échecs sur 20 appels → ouvert 30 s). Jeton OAuth2 mis en cache jusqu'à 1 min avant son expiration.
 - **Sécurité** : aucune donnée carte ne transite par le backend ; secrets PayPal dans le secrets manager du cloud.
 
 ---

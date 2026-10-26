@@ -23,18 +23,23 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 1 — Fondations du repo GitHub
 
-- [ ] `git init` + push sur GitHub, branche par défaut `main`
-- [ ] Protection de `main` : PR obligatoire, 1 review min., checks CI requis, historique linéaire
-- [ ] `CODEOWNERS`, templates d'issues et de PR
-- [ ] Convention de commits (Conventional Commits) + versioning sémantique
-- [ ] Activer **Dependabot** (Maven, GitHub Actions, OpenTofu, Docker) et **secret scanning / push protection**
-- [ ] Créer les environnements GitHub : `staging`, `production` (avec reviewers obligatoires pour prod)
-- [ ] Structure du repo :
+- [x] Repo GitHub `AdrienDeu/ecom`, branches `main` (prod) et `dev` (intégration)
+- [x] Rulesets `main` et `dev` : PR obligatoire, checks CI + CodeQL requis et à jour, pas de force-push ni suppression ; `dev` en squash + historique linéaire, `main` en merge commit (promotion depuis `dev`)
+- [x] `CODEOWNERS`, templates d'issues et de PR, `.editorconfig`, README
+- [x] Convention de commits (Conventional Commits) — documentée dans le README
+- [ ] Versioning sémantique automatisé (release-please, étape 8)
+- [x] Dependabot configuré (Maven, GitHub Actions ; npm et OpenTofu à décommenter plus tard)
+- [x] Secret scanning + push protection, alertes et correctifs de sécurité Dependabot, signalement privé de vulnérabilités
+- [x] Workflows `ci.yml` (build + tests Java 25) et `codeql.yml` (Java + Actions), actions épinglées par SHA
+- [x] ADR `docs/adr/0001-socle-technique.md`
+- [x] Environnements GitHub `staging` et `production` (déploiement depuis `main` uniquement, approbation obligatoire pour prod)
+- [x] Structure du repo :
   ```
   ecom/
   ├── src/                    # backend Spring Boot (API REST)
   ├── frontend/               # SPA
   ├── infra/                  # OpenTofu (AWS)
+  │   ├── bootstrap/
   │   ├── modules/
   │   └── envs/{staging,production}/
   ├── observability/          # dashboards Grafana, règles d'alerte
@@ -44,41 +49,65 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 2 — Socle applicatif
 
-- [ ] Ajouter les dépendances de base (web, JPA, validation, Flyway, PostgreSQL, actuator) — cf. doc technique
-- [ ] `compose.yaml` local : PostgreSQL, Redis, Prometheus, Grafana, Tempo/Jaeger
-- [ ] Profils Spring : `local`, `test`, `staging`, `prod` ; config externalisée (variables d'env, pas de secrets dans le repo)
-- [ ] Gestion d'erreurs globale (`ProblemDetail` RFC 9457)
-- [ ] Configuration CORS pour le domaine de la SPA
-- [ ] Initialiser le projet Angular dans `frontend/` (`ng new`, standalone components, angular-eslint, tests unitaires)
-- [ ] Client API Angular généré depuis l'OpenAPI du backend (`openapi-generator`, générateur `typescript-angular`)
-- [ ] Proxy de dev Angular (`proxy.conf.json`) : `/api` → `localhost:8080`
-- [ ] Documentation API OpenAPI (springdoc)
-- [ ] Healthchecks liveness/readiness (actuator probes)
-- [ ] Tests d'intégration avec **Testcontainers**
+- [x] Dépendances de base (webmvc, validation, JPA, Flyway, PostgreSQL, actuator, Prometheus, springdoc) — cf. doc technique
+- [x] `compose.yaml` local : PostgreSQL 18, Valkey 9, Prometheus, Grafana (provisionné) — démarré automatiquement avec le profil `local`
+- [ ] Ajouter Tempo au `compose.yaml` (étape 5, avec OpenTelemetry)
+- [x] Profils Spring `local`, `staging`, `prod` ; config externalisée (variables d'env, pas de secrets dans le repo) — les tests utilisent Testcontainers sans profil dédié
+- [x] Gestion d'erreurs globale (`ProblemDetail` RFC 9457), sans fuite de détails internes sur les 500
+- [x] Configuration CORS (`ecom.cors.allowed-origins`, `localhost:4200` en local)
+- [x] Projet Angular 22 dans `frontend/` (standalone, angular-eslint, Vitest, Node 24 en CI, scripts d'installation natifs refusés)
+- [x] Génération du client API configurée (`npm run generate:api`, ng-openapi-gen) — à lancer quand les premiers endpoints existeront (étape 3)
+- [x] Proxy de dev Angular (`proxy.conf.json`) : `/api` → `localhost:8080`
+- [x] Documentation API OpenAPI (springdoc) : `/api/openapi`, `/api/swagger-ui` — désactivée en prod
+- [x] Healthchecks liveness/readiness sur le port de management `8081`, non exposé sur le port applicatif
+- [x] Tests d'intégration avec **Testcontainers** (`*IT`, failsafe) + `TestEcomApplication` pour lancer l'app sur Testcontainers
+- [x] Job CI frontend (audit, lint, tests, build) ajouté à `ci.yml` ; Dependabot npm et docker-compose activés
 
 ## Étape 3 — Domaine métier
 
-- [ ] **Catalogue** : produits, catégories, prix, stock, images, recherche/pagination
-- [ ] **Panier** : panier invité (identifié par un token, stocké dans Redis) + fusion à la connexion
-- [ ] **Commande** : machine à états (`CREATED → PAYMENT_PENDING → PAID → SHIPPED → DELIVERED`, `CANCELLED`, `REFUNDED`)
-- [ ] **Clients** : inscription, adresses, historique de commandes
-- [ ] **Sécurité** : Cognito User Pool + client public SPA (Authorization Code + PKCE, Hosted UI / Managed Login) ; Angular via `angular-auth-oidc-client` ; le backend valide les JWT Cognito (resource server) ; rôles via **groupes Cognito** `CUSTOMER` / `ADMIN` (claim `cognito:groups`)
-- [ ] **Back-office** : gestion produits, commandes, remboursements
-- [ ] Réservation de stock à la commande, libération si paiement échoué/expiré
+### 3a — Backend
+
+- [x] **Catalogue** : produits, catégories, prix (`Money`), images (URL), recherche plein texte simple + filtre catégorie + pagination
+- [x] **Panier** : panier invité (`X-Cart-Id`, Valkey/Redis, TTL 30 j) + fusion à la connexion, prix toujours relus du catalogue
+- [x] **Commande** : machine à états (`CREATED → PAYMENT_PENDING → PAID → SHIPPED → DELIVERED`, `CANCELLED`, `REFUNDED`), prix et adresse figés au checkout
+- [x] **Clients** : adresses (`/api/me/addresses`), historique de commandes — l'inscription est gérée par Cognito
+- [x] **Sécurité backend** : validation des JWT Cognito (issuer, signature, `token_use=access`, `client_id`), groupes `cognito:groups` → rôles ; actuator ouvert sur le port de management uniquement
+- [x] Serveur OIDC de test (`mock-oauth2-server`) dans `compose.yaml` pour développer sans Cognito
+- [x] **Back-office API** : produits, catégories, stock, commandes (expédition, livraison, annulation)
+- [x] Réservation de stock atomique au checkout (pas de survente, testé en concurrence), libération à l'annulation et à l'expiration (job `SKIP LOCKED`, multi-instances)
+- [x] Remboursements (étape 4, via le module paiement)
+- [ ] Clé d'idempotence sur `POST /api/orders` (double-clic → une seule commande)
+- [ ] Cache du catalogue (`@Cacheable`) si les tests de charge le justifient
+
+### 3b — Frontend Angular
+
+- [x] Authentification OIDC (`angular-auth-oidc-client`, Authorization Code + PKCE, refresh token), jeton limité à `/api/**`, guards, retour à la page demandée
+- [x] Configuration runtime `/config.json` (même build promu de staging à prod)
+- [x] Catalogue : liste, recherche, filtre catégorie, pagination, fiche produit
+- [x] Panier invité + fusion à la connexion
+- [x] Compte : adresses, historique et détail des commandes, annulation
+- [x] Checkout jusqu'à la création de commande (le paiement arrive à l'étape 4)
+- [x] Back-office : produits (création, édition, désactivation), catégories, stock, commandes (expédition, livraison, annulation)
+- [x] Client API généré (`npm run generate:api`) + test de contrat OpenAPI côté backend
+- [x] Parcours complet validé dans Chromium headless (catalogue → panier invité → login → fusion → adresse → commande → back-office → mobile)
+- [ ] Tests E2E Playwright versionnés et exécutés en CD contre staging (étape 8)
+- [ ] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
+- [ ] Images produits : upload vers S3 (aujourd'hui une URL saisie à la main)
 
 ## Étape 4 — Paiement (PayPal, extensible)
 
-- [ ] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
-- [ ] Modèle `Payment` / `PaymentAttempt` persisté, indépendant du fournisseur
-- [ ] Adapter **PayPal** (API Orders v2) : `create order` → approbation client → `capture`
-- [ ] Authentification OAuth2 client credentials PayPal avec cache du token
-- [ ] **Clé d'idempotence** sur chaque création/capture (`PayPal-Request-Id`)
-- [ ] **Webhooks** PayPal : endpoint dédié + vérification de signature + traitement idempotent
-- [ ] Réconciliation : job planifié qui vérifie les paiements restés `PENDING`
-- [ ] Remboursements (total / partiel)
-- [ ] Résilience : timeouts, retry contrôlé, circuit breaker sur les appels PayPal
-- [ ] Tests : WireMock pour l'API PayPal + tests manuels sur **PayPal Sandbox**
-- [ ] Vérifier qu'ajouter un nouveau provider (ex. Stripe) = **un nouvel adapter, zéro modification du domaine**
+- [x] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
+- [x] Modèle `Payment` / `PaymentAttempt` persisté, indépendant du fournisseur
+- [x] Adapter **PayPal** (API Orders v2) : `create order` → approbation client (PayPal JS SDK Buttons) → `capture`
+- [x] Authentification OAuth2 client credentials PayPal avec cache du token
+- [x] **Clé d'idempotence** sur chaque création/capture/remboursement (`PayPal-Request-Id`)
+- [x] **Webhooks** PayPal : endpoint dédié + vérification de signature + traitement idempotent
+- [x] Réconciliation : job planifié qui vérifie les paiements restés `PENDING`
+- [x] Remboursements (total / partiel) + remboursement automatique d'un paiement capturé sur une commande expirée
+- [x] Résilience : timeouts, retry contrôlé, circuit breaker sur les appels PayPal
+- [x] Tests : WireMock pour l'API PayPal
+- [ ] Tests manuels sur **PayPal Sandbox** (app sandbox + webhook à créer, cf. README)
+- [ ] Vérifier qu'ajouter un nouveau provider (ex. Stripe) = **un nouvel adapter, zéro modification du domaine** (étape 10)
 
 ## Étape 5 — Observabilité & métriques
 
@@ -144,7 +173,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 - [ ] Aucune donnée carte stockée (PayPal gère la conformité **PCI-DSS**)
 - [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention
-- [ ] Headers de sécurité (CSP, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
+- [ ] Headers de sécurité (CSP — autoriser `www.paypal.com`, `*.paypal.com`, `*.paypalobjects.com` pour le SDK PayPal —, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
 - [ ] Jetons stockés côté SPA en mémoire (pas de `localStorage`), refresh token rotatif
 - [ ] Revue OWASP Top 10, test de pénétration avant mise en prod
 - [ ] Sauvegardes RDS automatiques + test de restauration

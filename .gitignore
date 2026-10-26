@@ -31,3 +31,25 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Secrets / env ###
+.env
+.env.*
+!.env.example
+
+### Node / Angular ###
+node_modules/
+frontend/dist/
+frontend/.angular/
+frontend/coverage/
+
+### OpenTofu ###
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
