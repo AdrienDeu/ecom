@@ -46,6 +46,16 @@ class EcomApplicationIT {
 
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.body()).contains("jvm_memory_used_bytes");
+        assertThat(response.body()).contains("ecom_page_views_total{application=\"ecom\"", "ecom_orders_placed_total");
+    }
+
+    @Test
+    void latencyHistogramHasBucketsAtTheSloThresholds() throws Exception {
+        get(port, "/api/catalog/products");
+
+        var metrics = get(managementPort, "/actuator/prometheus").body();
+
+        assertThat(metrics).contains("http_server_requests_seconds_bucket", "le=\"0.1\"", "le=\"0.3\"", "le=\"1.0\"");
     }
 
     @Test

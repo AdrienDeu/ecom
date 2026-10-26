@@ -1,0 +1,77 @@
+# Règles d'alerte versionnées : chargées par Prometheus en local, par Amazon Managed Prometheus en AWS.
+# Seuils alignés sur les SLO (docs/TECHNICAL.md §6.5). Tests : observability/alerts/tests/.
+groups:
+  - name: ecom-api
+    rules:
+      - alert: EcomDown
+        expr: up{job="ecom"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "L'application ecom ne répond plus au scrape Prometheus"
+
+      - alert: EcomHighErrorRate
+        expr: |
+          sum(rate(http_server_requests_seconds_count{application="ecom", status=~"5.."}[5m]))
+            / sum(rate(http_server_requests_seconds_count{application="ecom"}[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Plus de 1 % de réponses 5xx sur 5 min ({{ $value | humanizePercentage }})"
+
+      - alert: EcomSlowResponses
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{application="ecom", uri!~"/api/webhooks/.*"}[5m]))
+          ) > 0.3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Temps de réponse p95 au-dessus du SLO de 300 ms ({{ $value | humanizeDuration }})"
+
+  - name: ecom-payment
+    rules:
+      - record: ecom:payment_failure_ratio:rate15m
+        expr: |
+          sum by (provider) (rate(ecom_payment_attempts_total{outcome="failed"}[15m]))
+            / sum by (provider) (rate(ecom_payment_attempts_total[15m]))
+
+      - alert: EcomPaymentFailureRateHigh
+        # Au moins quelques paiements, pour ne pas alerter sur 1 échec sur 2 tentatives la nuit
+        expr: |
+          ecom:payment_failure_ratio:rate15m > 0.05
+            and on (provider) sum by (provider) (increase(ecom_payment_attempts_total[15m])) >= 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Taux d'échec des paiements {{ $labels.provider }} au-dessus de 5 % ({{ $value | humanizePercentage }})"
+
+      - alert: EcomPaymentProviderErrors
+        expr: sum by (provider) (rate(ecom_payment_duration_seconds_count{outcome="error"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Le fournisseur de paiement {{ $labels.provider }} est injoignable ou en erreur"
+
+      - alert: EcomPaymentWebhooksRejected
+        expr: sum by (provider) (increase(ecom_payment_webhooks_total{result="rejected"}[15m])) > 5
+        labels:
+          severity: warning
+        annotations:
+          summary: "Webhooks {{ $labels.provider }} rejetés (signature invalide) : configuration ou tentative de fraude"
+
+      - alert: EcomPaymentWebhooksMissing
+        # Des paiements sont initiés mais aucun webhook n'arrive : URL ou id de webhook mal configuré
+        expr: |
+          sum by (provider) (increase(ecom_payment_duration_seconds_count{operation="initiate", outcome="succeeded"}[1h])) > 0
+            unless on (provider) sum by (provider) (increase(ecom_payment_webhooks_total{result!="rejected"}[1h])) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Aucun webhook {{ $labels.provider }} reçu depuis 1 h alors que des paiements sont initiés"

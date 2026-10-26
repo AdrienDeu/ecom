@@ -42,6 +42,8 @@ services:
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-lifecycle
+      # Exemplars : lien d'un point de latence vers la trace correspondante dans Tempo
+      - --enable-feature=exemplar-storage
     ports:
       - "9090:9090"
     volumes:
@@ -49,6 +51,33 @@ services:
       - ./observability/alerts:/etc/prometheus/rules:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    labels:
+      org.springframework.boot.ignore: "true"
+
+  # Traces OTLP de l'application (http://localhost:4318/v1/traces), consultées dans Grafana
+  tempo:
+    image: grafana/tempo:2.10.10
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "4318:4318"
+      - "3200:3200"
+    volumes:
+      - ./observability/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+    tmpfs:
+      - /var/tempo:mode=1777
+    labels:
+      org.springframework.boot.ignore: "true"
+
+  # Logs OTLP de l'application (http://localhost:3100/otlp/v1/logs), corrélés aux traces par trace_id
+  loki:
+    image: grafana/loki:3.7.9
+    command: ["-config.file=/etc/loki/loki.yml"]
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./observability/loki/loki.yml:/etc/loki/loki.yml:ro
+    tmpfs:
+      - /loki:mode=1777
     labels:
       org.springframework.boot.ignore: "true"
 
@@ -65,6 +94,8 @@ services:
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
+      - tempo
+      - loki
     labels:
       org.springframework.boot.ignore: "true"
 

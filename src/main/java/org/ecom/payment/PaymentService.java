@@ -47,9 +47,11 @@ public class PaymentService {
     private final OrderService orders;
     private final TransactionTemplate tx;
     private final Clock clock;
+    private final PaymentMetrics metrics;
 
     PaymentService(PaymentRepository payments, PaymentAttemptRepository attempts, WebhookEventRepository webhookEvents,
-                   PaymentProviderRegistry providers, OrderService orders, TransactionTemplate tx, Clock clock) {
+                   PaymentProviderRegistry providers, OrderService orders, TransactionTemplate tx, Clock clock,
+                   PaymentMetrics metrics) {
         this.payments = payments;
         this.attempts = attempts;
         this.webhookEvents = webhookEvents;
@@ -57,6 +59,7 @@ public class PaymentService {
         this.orders = orders;
         this.tx = tx;
         this.clock = clock;
+        this.metrics = metrics;
     }
 
     public List<PaymentMethodView> methods() {
@@ -99,7 +102,7 @@ public class PaymentService {
             var request = new PaymentRequest(payment.getId(), orders.get(orderId).reference(), payment.getAmount(), payment.initiationKey());
             initiation = call(payment, Operation.INITIATE, payment.initiationKey(), () -> provider.initiate(request));
         } catch (PaymentRejectedException e) {
-            update(payment.getId(), p -> p.fail(e.reason()));
+            metrics.settled(update(payment.getId(), p -> p.fail(e.reason())));
             throw new BusinessException("PAYMENT_REJECTED", "The payment was refused by the provider");
         }
         // If the order expired in the meantime this rolls back, and the reconciliation job cancels the payment
@@ -160,9 +163,16 @@ public class PaymentService {
         var provider = providers.get(requestedProvider);
         // From here on, use the registered id rather than the one taken from the URL
         var providerId = provider.id();
-        var event = provider.parseWebhook(payload);
+        PaymentEvent event;
+        try {
+            event = provider.parseWebhook(payload);
+        } catch (InvalidWebhookException e) {
+            metrics.webhook(providerId, "unknown", "rejected");
+            throw e;
+        }
         if (webhookEvents.existsByProviderAndEventId(providerId, event.eventId())) {
             log.debug("Webhook {} already processed", event.eventId());
+            metrics.webhook(providerId, event.eventType(), "duplicate");
             return;
         }
         log.info("Webhook {} {} for {}", event.eventType(), event.eventId(),
@@ -183,6 +193,7 @@ public class PaymentService {
                 // nothing to do
             }
         }
+        metrics.webhook(providerId, event.eventType(), "processed");
         try {
             webhookEvents.save(new WebhookEvent(providerId, event.eventId(), event.eventType()));
         } catch (DataIntegrityViolationException e) {
@@ -218,10 +229,10 @@ public class PaymentService {
     private void reconcile(Payment payment) {
         if (payment.getStatus() == PaymentStatus.INITIATED) {
             // The provider reference was never stored, so the customer could not approve anything
-            update(payment.getId(), p -> {
+            metrics.settled(update(payment.getId(), p -> {
                 p.cancel("INITIATION_INCOMPLETE");
                 releaseOrder(p);
-            });
+            }));
             return;
         }
         var provider = providers.get(payment.getProvider());
@@ -254,11 +265,13 @@ public class PaymentService {
     /** Applies the provider's view of an open payment to the payment and its order. */
     private Payment apply(UUID paymentId, PaymentResult result) {
         var refundNeeded = new AtomicBoolean();
+        var settled = new AtomicBoolean();
         var payment = retryOnConflict(() -> inTransaction(() -> {
             var p = load(paymentId);
             if (!PaymentStatus.OPEN.contains(p.getStatus())) {
                 return p; // already settled by a concurrent path
             }
+            settled.set(result.outcome() != PaymentResult.Outcome.PENDING && result.outcome() != PaymentResult.Outcome.APPROVED);
             switch (result.outcome()) {
                 case CAPTURED -> {
                     p.captured(result.captureId());
@@ -282,6 +295,9 @@ public class PaymentService {
             }
             return p;
         }));
+        if (settled.get()) {
+            metrics.settled(payment);
+        }
         if (refundNeeded.get()) {
             return compensate(payment);
         }
@@ -308,8 +324,12 @@ public class PaymentService {
     private Payment recordRefund(UUID paymentId, String refundId, Money amount) {
         return retryOnConflict(() -> inTransaction(() -> {
             var p = load(paymentId);
+            var known = p.getRefunds().size();
             if (p.recordRefund(refundId, amount, clock.instant()) && REFUNDABLE_ORDER.contains(orderStatus(p))) {
                 orders.markRefunded(p.getOrderId());
+            }
+            if (p.getRefunds().size() > known) {
+                metrics.refunded(p.getProvider());
             }
             return p;
         }));
@@ -319,17 +339,23 @@ public class PaymentService {
 
     /** Calls the provider and keeps track of the attempt, whatever its outcome. */
     private <T> T call(Payment payment, Operation operation, String idempotencyKey, Supplier<T> action) {
+        var start = System.nanoTime();
         try {
             var result = action.get();
-            attempts.save(new PaymentAttempt(payment.getId(), operation, idempotencyKey, Outcome.SUCCEEDED, String.valueOf(result)));
+            record(payment, operation, idempotencyKey, Outcome.SUCCEEDED, String.valueOf(result), start);
             return result;
         } catch (PaymentRejectedException e) {
-            attempts.save(new PaymentAttempt(payment.getId(), operation, idempotencyKey, Outcome.REJECTED, e.reason()));
+            record(payment, operation, idempotencyKey, Outcome.REJECTED, e.reason(), start);
             throw e;
         } catch (PaymentProviderException e) {
-            attempts.save(new PaymentAttempt(payment.getId(), operation, idempotencyKey, Outcome.ERROR, e.getMessage()));
+            record(payment, operation, idempotencyKey, Outcome.ERROR, e.getMessage(), start);
             throw e;
         }
+    }
+
+    private void record(Payment payment, Operation operation, String idempotencyKey, Outcome outcome, String detail, long start) {
+        metrics.call(payment.getProvider(), operation, outcome, Duration.ofNanos(System.nanoTime() - start));
+        attempts.save(new PaymentAttempt(payment.getId(), operation, idempotencyKey, outcome, detail));
     }
 
     /** Puts the order back to {@code CREATED} so that the customer can pay again. */
@@ -356,8 +382,8 @@ public class PaymentService {
         return payments.findById(paymentId).orElseThrow(() -> new ResourceNotFoundException("Payment", paymentId));
     }
 
-    private void update(UUID paymentId, Consumer<Payment> change) {
-        inTransaction(() -> {
+    private Payment update(UUID paymentId, Consumer<Payment> change) {
+        return inTransaction(() -> {
             var payment = load(paymentId);
             change.accept(payment);
             return payment;

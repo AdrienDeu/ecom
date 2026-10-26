@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.UUID;
 
 import com.github.tomakehurst.wiremock.WireMockServer;
+import io.micrometer.core.instrument.MeterRegistry;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.client.WireMock;
@@ -52,6 +53,9 @@ class PaymentIT extends ApiTestSupport {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    MeterRegistry registry;
+
     @Test
     void listsEnabledMethodsWithTheirPublicSettings() throws Exception {
         mvc.perform(get("/api/payments/methods").with(customer("alice")))
@@ -67,6 +71,7 @@ class PaymentIT extends ApiTestSupport {
         var customer = unique("alice");
         var order = placeOrder(customer, productId, 2);
         var paypalOrder = stubCreateOrder(order);
+        var successes = attempts("success", "none");
 
         var paymentId = startPayment(customer, order.id())
                 .andExpect(status().isCreated())
@@ -90,6 +95,9 @@ class PaymentIT extends ApiTestSupport {
 
         assertThat(orders.get(order.id()).status()).isEqualTo(OrderStatus.PAID);
         assertThat(inventory.level(productId).onHand()).isEqualTo(3);
+        assertThat(attempts("success", "none")).isEqualTo(successes + 1);
+        assertThat(registry.get("ecom.payment.duration").tags("provider", "paypal", "operation", "capture", "outcome", "succeeded")
+                .timer().count()).isPositive();
         paypal.verify(postRequestedFor(urlEqualTo("/v2/checkout/orders/%s/capture".formatted(paypalOrder)))
                 .withHeader("PayPal-Request-Id", equalTo("capture-" + payment)));
 
@@ -120,6 +128,7 @@ class PaymentIT extends ApiTestSupport {
         var order = placeOrder(customer, productId, 1);
         var paypalOrder = stubCreateOrder(order);
         var payment = paymentId(startPayment(customer, order.id()));
+        var declines = attempts("failed", "INSTRUMENT_DECLINED");
         paypal.stubFor(WireMock.post(urlEqualTo("/v2/checkout/orders/%s/capture".formatted(paypalOrder))).willReturn(aResponse()
                 .withStatus(422)
                 .withHeader("Content-Type", "application/json")
@@ -133,6 +142,7 @@ class PaymentIT extends ApiTestSupport {
 
         assertThat(orders.get(order.id()).status()).isEqualTo(OrderStatus.CREATED);
         assertThat(inventory.level(productId).reserved()).isEqualTo(1);
+        assertThat(attempts("failed", "INSTRUMENT_DECLINED")).isEqualTo(declines + 1);
         paypal.stubFor(createOrderRequest(order).willReturn(createdOrder(paypalOrder + "-2")));
         String retry = read(startPayment(customer, order.id()).andExpect(status().isCreated()).andReturn(), "$.id");
         assertThat(retry).isNotEqualTo(payment.toString());
@@ -205,8 +215,10 @@ class PaymentIT extends ApiTestSupport {
                 {"id": "WH-%s", "event_type": "CHECKOUT.ORDER.APPROVED", "resource": {"id": "%s", "status": "APPROVED"}}
                 """.formatted(paypalOrder, paypalOrder);
 
+        var duplicates = webhooks("CHECKOUT.ORDER.APPROVED", "duplicate");
         webhook(event).andExpect(status().isOk());
         webhook(event).andExpect(status().isOk());
+        assertThat(webhooks("CHECKOUT.ORDER.APPROVED", "duplicate")).isEqualTo(duplicates + 1);
 
         assertThat(orders.get(order.id()).status()).isEqualTo(OrderStatus.PAID);
         paypal.verify(1, postRequestedFor(urlEqualTo("/v2/checkout/orders/%s/capture".formatted(paypalOrder))));
@@ -331,6 +343,16 @@ class PaymentIT extends ApiTestSupport {
     }
 
     // --- Helpers ---
+
+    private double attempts(String outcome, String reason) {
+        var counter = registry.find("ecom.payment.attempts").tags("provider", "paypal", "outcome", outcome, "reason", reason).counter();
+        return counter == null ? 0 : counter.count();
+    }
+
+    private double webhooks(String type, String result) {
+        var counter = registry.find("ecom.payment.webhooks").tags("provider", "paypal", "type", type, "result", result).counter();
+        return counter == null ? 0 : counter.count();
+    }
 
     private record PlacedOrder(UUID id, String reference) {
     }

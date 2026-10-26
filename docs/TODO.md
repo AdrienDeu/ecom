@@ -51,7 +51,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 - [x] Dépendances de base (webmvc, validation, JPA, Flyway, PostgreSQL, actuator, Prometheus, springdoc) — cf. doc technique
 - [x] `compose.yaml` local : PostgreSQL 18, Valkey 9, Prometheus, Grafana (provisionné) — démarré automatiquement avec le profil `local`
-- [ ] Ajouter Tempo au `compose.yaml` (étape 5, avec OpenTelemetry)
+- [x] Ajouter Tempo (et Loki) au `compose.yaml` (étape 5, avec OpenTelemetry)
 - [x] Profils Spring `local`, `staging`, `prod` ; config externalisée (variables d'env, pas de secrets dans le repo) — les tests utilisent Testcontainers sans profil dédié
 - [x] Gestion d'erreurs globale (`ProblemDetail` RFC 9457), sans fuite de détails internes sur les 500
 - [x] Configuration CORS (`ecom.cors.allowed-origins`, `localhost:4200` en local)
@@ -111,17 +111,19 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 5 — Observabilité & métriques
 
-- [ ] Micrometer + endpoint Prometheus (`/actuator/prometheus`) sur un port de management séparé
-- [ ] Histogrammes de latence (`http.server.requests`) avec percentiles p50/p95/p99
-- [ ] Métriques métier custom :
-  - [ ] `ecom.page.views` (vues par page/type de page)
-  - [ ] `ecom.payment.attempts` tagué `provider`, `outcome` (`success` / `failed` / `cancelled`), `reason`
-  - [ ] `ecom.payment.duration`
-  - [ ] `ecom.orders.created`, `ecom.cart.abandoned`
-- [ ] Traces distribuées (OpenTelemetry → Tempo/Jaeger), corrélation `traceId` dans les logs
-- [ ] Logs structurés JSON → Loki (ou équivalent cloud)
-- [ ] Dashboards Grafana versionnés dans `observability/` (temps de réponse, trafic, taux d'échec paiement)
-- [ ] Alertes : taux d'échec paiement > seuil, p95 > SLO, erreurs 5xx, webhook PayPal en échec
+- [x] Micrometer + endpoint Prometheus (`/actuator/prometheus`) sur un port de management séparé
+- [x] Histogrammes de latence (`http.server.requests`) avec percentiles p50/p95/p99 + buckets aux seuils SLO (100 ms, 300 ms, 1 s)
+- [x] Métriques métier custom :
+  - [x] `ecom.page.views` (vues par type de page, envoyées par la SPA)
+  - [x] `ecom.payment.attempts` tagué `provider`, `outcome` (`success` / `failed` / `cancelled`), `reason`
+  - [x] `ecom.payment.duration` (par opération et issue) + `ecom.payment.webhooks`, `ecom.payment.refunds`
+  - [x] `ecom.orders.placed`, `ecom.orders.expired` (abandon au paiement, à la place de `ecom.cart.abandoned`)
+- [x] Traces distribuées (OpenTelemetry → Tempo en local, ADOT → X-Ray en AWS), corrélation `traceId` dans les logs, exemplars Prometheus → traces
+- [x] Logs structurés JSON (ECS) en staging/prod → CloudWatch ; OTLP → Loki en local, corrélés aux traces
+- [x] Dashboards Grafana versionnés dans `observability/` (temps de réponse, trafic, taux d'échec paiement)
+- [x] Alertes : taux d'échec paiement > seuil, p95 > SLO, erreurs 5xx, webhook PayPal absent ou rejeté, fournisseur en erreur — testées avec `promtool`
+- [ ] Core Web Vitals (LCP, INP, CLS) côté navigateur — CloudWatch RUM (étape 7)
+- [ ] Exécuter `promtool check rules` / `test rules` en CI (étape 6)
 
 ## Étape 6 — CI (GitHub Actions)
 
