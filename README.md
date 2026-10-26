@@ -59,6 +59,13 @@ Se connecter dans la SPA en local : la page de login du serveur OIDC de test dem
 {"client_id": "ecom-local", "token_use": "access", "cognito:groups": ["CUSTOMER", "ADMIN"]}
 ```
 
+Paiement PayPal en local (désactivé par défaut) : créer une app sur le [dashboard développeur PayPal](https://developer.paypal.com/dashboard/applications/sandbox), puis lancer le backend avec ses identifiants sandbox. Les webhooks (`/api/webhooks/paypal`) exigent une URL publique (tunnel) et l'id du webhook créé dans l'app ; sans eux, la réconciliation finit de régler les paiements.
+
+```bash
+PAYPAL_ENABLED=true PAYPAL_CLIENT_ID=... PAYPAL_CLIENT_SECRET=... PAYPAL_WEBHOOK_ID=... \
+  ./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+```
+
 Obtenir un jeton admin en ligne de commande (claims définis dans `dev/mock-oidc.json`) :
 
 ```bash

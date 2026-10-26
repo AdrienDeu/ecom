@@ -61,3 +61,20 @@ ecom:
     reservation-ttl: PT30M
     expiry-job:
       interval: PT1M
+  payment:
+    reconciliation:
+      interval: PT5M
+      # open payments untouched for this long are checked with the provider
+      stale-after: PT15M
+    providers:
+      paypal:
+        # Fournis par variables d'environnement (secrets dans Secrets Manager en staging/prod)
+        enabled: ${PAYPAL_ENABLED:false}
+        base-url: ${PAYPAL_BASE_URL:https://api-m.sandbox.paypal.com}
+        client-id: ${PAYPAL_CLIENT_ID:}
+        client-secret: ${PAYPAL_CLIENT_SECRET:}
+        webhook-id: ${PAYPAL_WEBHOOK_ID:}
+        currency: EUR
+        brand-name: ecom
+        connect-timeout: 2s
+        read-timeout: 10s

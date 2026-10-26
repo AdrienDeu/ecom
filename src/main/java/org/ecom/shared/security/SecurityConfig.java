@@ -8,7 +8,6 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
-import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -48,6 +47,8 @@ class SecurityConfig {
                         .requestMatchers("/api/cart/**").permitAll()
                         .requestMatchers("/api/openapi/**", "/api/swagger-ui/**", "/api/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
+                        // Payment provider notifications, authenticated by their signature
+                        .requestMatchers(HttpMethod.POST, "/api/webhooks/**").permitAll()
                         .requestMatchers("/api/admin/**").hasRole(Roles.ADMIN)
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
@@ -55,7 +56,7 @@ class SecurityConfig {
                 // Double-submit cookie: the token is written in the XSRF-TOKEN cookie and must come back in the
                 // X-XSRF-TOKEN header, which Angular's HttpClient does automatically for same-origin requests.
                 // Defense in depth on top of bearer tokens and CORS; stateless, no session needed.
-                .csrf(CsrfConfigurer::spa)
+                .csrf(csrf -> csrf.spa().ignoringRequestMatchers("/api/webhooks/**"))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
     }

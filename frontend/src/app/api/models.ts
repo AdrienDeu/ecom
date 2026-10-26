@@ -17,8 +17,13 @@ export type { PagedModelAdminProductView } from './models/paged-model-admin-prod
 export type { PagedModelOrderView } from './models/paged-model-order-view';
 export type { PagedModelProductView } from './models/paged-model-product-view';
 export type { PageMetadata } from './models/page-metadata';
+export type { PaymentMethodView } from './models/payment-method-view';
+export type { PaymentView } from './models/payment-view';
 export type { PostalAddress } from './models/postal-address';
 export type { ProductView } from './models/product-view';
+export type { Refund } from './models/refund';
+export type { RefundRequest } from './models/refund-request';
+export type { StartPaymentRequest } from './models/start-payment-request';
 export type { StockLevel } from './models/stock-level';
 export type { UpdateProductRequest } from './models/update-product-request';
 export type { UpdateQuantityRequest } from './models/update-quantity-request';

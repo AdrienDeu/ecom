@@ -130,6 +130,12 @@ public class OrderService {
         return changeStatus(orderId, OrderStatus.CREATED);
     }
 
+    /** Once the whole payment has been refunded. Shipped goods are expected back: their stock is not restored. */
+    @Transactional
+    public OrderView markRefunded(UUID orderId) {
+        return changeStatus(orderId, OrderStatus.REFUNDED);
+    }
+
     // --- Expiry ---
 
     /**

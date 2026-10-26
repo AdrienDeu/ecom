@@ -21,6 +21,14 @@ class MoneyTest {
     }
 
     @Test
+    void subtractsAndCompares() {
+        assertThat(Money.eur("10").minus(Money.eur("2.50"))).isEqualTo(Money.eur("7.50"));
+        assertThat(Money.eur("10").isGreaterThan(Money.eur("9.99"))).isTrue();
+        assertThat(Money.eur("10").isGreaterThan(Money.eur("10.00"))).isFalse();
+        assertThatIllegalArgumentException().isThrownBy(() -> Money.eur("1").minus(Money.eur("2")));
+    }
+
+    @Test
     void rejectsNegativeAmountsAndCurrencyMismatch() {
         assertThatIllegalArgumentException().isThrownBy(() -> Money.eur("-1"));
         assertThatIllegalArgumentException().isThrownBy(() -> Money.eur("1").plus(new Money(BigDecimal.ONE, "USD")));

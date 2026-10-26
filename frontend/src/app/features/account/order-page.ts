@@ -6,14 +6,15 @@ import { orderCancel } from '../../api/fn/order-controller/order-cancel';
 import { orderMyOrder } from '../../api/fn/order-controller/order-my-order';
 import { errorMessage } from '../../core/errors';
 import { isCancellable, ORDER_STATUS_LABELS } from '../../core/labels';
+import { PaymentPanel } from './payment-panel';
 
 @Component({
   selector: 'app-order-page',
-  imports: [CurrencyPipe, DatePipe, RouterLink],
+  imports: [CurrencyPipe, DatePipe, RouterLink, PaymentPanel],
   template: `
     <a routerLink="/account/orders" class="back">← Mes commandes</a>
     @if (created()) {
-      <p class="alert success" role="status">Merci ! Votre commande est enregistrée.</p>
+      <p class="alert success" role="status">Merci ! Votre commande est enregistrée, il ne reste plus qu'à la payer.</p>
     }
     @if (error(); as e) {
       <p class="alert error" role="alert">{{ e }}</p>
@@ -29,8 +30,13 @@ import { isCancellable, ORDER_STATUS_LABELS } from '../../core/labels';
       @if (o.expiresAt) {
         <p class="alert">
           Paiement attendu avant {{ o.expiresAt | date: 'shortTime' }}, après quoi la commande sera annulée.
-          Le paiement en ligne arrive bientôt.
         </p>
+      }
+      @if (cancellable(o.status)) {
+        <app-payment-panel [orderId]="o.id" (settled)="order.reload()" />
+      }
+      @if (o.status === 'PAID') {
+        <p class="alert success" role="status">Paiement reçu, merci ! Nous préparons votre commande.</p>
       }
       <div class="layout">
         <section class="card table-scroll">

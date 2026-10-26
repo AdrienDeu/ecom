@@ -33,10 +33,25 @@ public record Money(BigDecimal amount, String currency) {
     }
 
     public Money plus(Money other) {
+        requireSameCurrency(other);
+        return new Money(amount.add(other.amount), currency);
+    }
+
+    /** @throws IllegalArgumentException if the result would be negative */
+    public Money minus(Money other) {
+        requireSameCurrency(other);
+        return new Money(amount.subtract(other.amount), currency);
+    }
+
+    public boolean isGreaterThan(Money other) {
+        requireSameCurrency(other);
+        return amount.compareTo(other.amount) > 0;
+    }
+
+    private void requireSameCurrency(Money other) {
         if (!currency.equals(other.currency)) {
             throw new IllegalArgumentException("Currency mismatch: %s vs %s".formatted(currency, other.currency));
         }
-        return new Money(amount.add(other.amount), currency);
     }
 
 }

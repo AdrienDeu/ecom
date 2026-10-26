@@ -354,18 +354,26 @@ public interface PaymentProvider {
     /** Identifiant stable : "paypal", "stripe"... */
     String id();
 
-    /** Initie le paiement ; renvoie éventuellement une URL de redirection/approbation. */
+    /** Paramètres publics nécessaires à la SPA (ex. client id PayPal), jamais de secret. */
+    Map<String, String> clientSettings();
+
+    /** Crée le paiement chez le fournisseur, à faire approuver par le client. */
     PaymentInitiation initiate(PaymentRequest request);
 
     /** Finalise le paiement (capture) après approbation du client. */
-    PaymentResult capture(PaymentReference reference);
+    PaymentResult capture(PaymentReference reference, String idempotencyKey);
 
-    PaymentResult refund(PaymentReference reference, Money amount);
+    /** État du paiement chez le fournisseur (job de réconciliation). */
+    PaymentResult retrieve(PaymentReference reference);
 
-    /** Vérifie et traduit un webhook fournisseur en événement de domaine. */
+    RefundResult refund(PaymentReference reference, Money amount, String idempotencyKey);
+
+    /** Vérifie et traduit un webhook fournisseur en événement indépendant du fournisseur. */
     PaymentEvent parseWebhook(WebhookPayload payload);
 }
 ```
+
+Un adapter signale deux types d'échec : `PaymentProviderException` (fournisseur injoignable, issue inconnue → `503 PAYMENT_PROVIDER_UNAVAILABLE`, rejouable avec la même clé) et `PaymentRejectedException` (refus définitif).
 
 ```java
 @Component
@@ -404,7 +412,7 @@ ecom:
         read-timeout: 10s
 ```
 
-L'adapter PayPal est annoté `@ConditionalOnBooleanProperty("ecom.payment.providers.paypal.enabled")`. **Ajouter Stripe = créer `adapter/stripe/` + sa configuration**, sans toucher au domaine.
+La configuration PayPal (`PaypalConfiguration`) est annotée `@ConditionalOnBooleanProperty("ecom.payment.providers.paypal.enabled")` ; une fois activée, les identifiants sont obligatoires et validés au démarrage. **Ajouter Stripe = créer `adapter/stripe/` + sa configuration**, sans toucher au domaine.
 
 ### 5.2 Flux PayPal (Orders v2)
 
@@ -429,9 +437,14 @@ Client        ecom                         PayPal
 - **Statuts** : `INITIATED → PENDING_APPROVAL → CAPTURED` ; `FAILED`, `CANCELLED`, `REFUNDED`, `PARTIALLY_REFUNDED`.
 - **Idempotence** : chaque `PaymentAttempt` a une clé unique transmise à PayPal ; les webhooks sont dédoublonnés via `webhook_event.event_id` (contrainte unique).
 - **Webhooks** : signature vérifiée (`/v1/notifications/verify-webhook-signature`) avant tout traitement ; endpoint public (sans JWT) mais rejeté si la signature est invalide. Exposé via ALB/CloudFront sur `/api/webhooks/paypal`.
-- **Flux SPA** : la SPA appelle `POST /api/payments` → reçoit l'`orderId` PayPal → affiche les PayPal JS SDK Buttons → au `onApprove`, appelle `POST /api/payments/{id}/capture`. Le montant est **toujours** recalculé côté serveur à partir de la commande, jamais envoyé par la SPA.
-- **Réconciliation** : job `@Scheduled` qui interroge PayPal pour les paiements `PENDING_APPROVAL` > 15 min.
-- **Résilience** : timeouts explicites, retry uniquement sur erreurs réseau/5xx et toujours avec la même clé d'idempotence, circuit breaker.
+- **Flux SPA** : la page de la commande charge `GET /api/payments/methods` (client id PayPal), puis la SPA appelle `POST /api/payments` → reçoit l'`orderId` PayPal (`providerReference`) → affiche les PayPal JS SDK Buttons → au `onApprove`, appelle `POST /api/payments/{id}/capture`. Le montant est **toujours** recalculé côté serveur à partir de la commande, jamais envoyé par la SPA.
+- **Clés d'idempotence déterministes** : `initiate-{paymentId}` et `capture-{paymentId}` ; la capture peut venir du client, du webhook `CHECKOUT.ORDER.APPROVED` ou de la réconciliation, la même clé garantit qu'elle n'a lieu qu'une fois. Chaque appel est journalisé dans `payment_attempt` (opération, clé, issue).
+- **Pas de transaction pendant les appels HTTP** : chaque étape (création du `Payment`, appel fournisseur, application du résultat) committe séparément (`TransactionTemplate`) ; le résultat est appliqué en relisant le paiement, le premier chemin qui le règle gagne, les autres deviennent sans effet.
+- **Commande expirée ou annulée pendant l'approbation** : la capture n'est pas tentée (paiement `CANCELLED`) ; si l'argent a malgré tout été capturé (webhook), il est **remboursé automatiquement** (clé `compensation-{paymentId}`).
+- **Un seul paiement vivant par commande** (index unique partiel hors `FAILED`/`CANCELLED`) : un paiement refusé laisse la commande en `CREATED`, le client peut réessayer.
+- **Remboursements** : back-office `POST /api/admin/payments/{id}/refund` (total par défaut, partiel avec `amount`) ; les remboursements faits depuis le dashboard PayPal sont enregistrés via le webhook `PAYMENT.CAPTURE.REFUNDED`, dédoublonnés par id de remboursement. La commande passe `REFUNDED` quand il ne reste rien à rembourser.
+- **Réconciliation** : job `@Scheduled` (toutes les 5 min, `SKIP LOCKED` multi-instances) qui interroge PayPal pour les paiements ouverts depuis plus de 15 min : approuvé → capture, capturé → commande payée, abandonné sur une commande expirée → annulé.
+- **Résilience** : timeouts explicites (2 s connexion, 10 s lecture), 2 retries (backoff 200 ms ×2) uniquement sur erreurs réseau, 5xx, 429 et 401 (jeton renouvelé) avec la même clé d'idempotence (`RetryTemplate` de Spring Framework 7), circuit breaker Resilience4j (50 % d'échecs sur 20 appels → ouvert 30 s). Jeton OAuth2 mis en cache jusqu'à 1 min avant son expiration.
 - **Sécurité** : aucune donnée carte ne transite par le backend ; secrets PayPal dans le secrets manager du cloud.
 
 ---

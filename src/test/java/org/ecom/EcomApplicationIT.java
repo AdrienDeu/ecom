@@ -19,7 +19,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
-@Import(TestcontainersConfiguration.class)
+@Import({TestcontainersConfiguration.class, PaypalStubConfiguration.class})
 @ActiveProfiles("test")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = "management.server.port=0")
 class EcomApplicationIT {
@@ -68,10 +68,14 @@ class EcomApplicationIT {
         var document = JsonPath.parse(get(port, "/api/openapi").body());
 
         List<String> operationIds = document.read("$.paths.*.*.operationId");
-        assertThat(operationIds).contains("catalogProducts", "adminCatalogProducts", "orderCheckout").doesNotHaveDuplicates();
+        assertThat(operationIds).contains("catalogProducts", "adminCatalogProducts", "orderCheckout",
+                "paymentMethods", "paymentStart", "paymentCapture", "adminPaymentList", "adminPaymentRefund").doesNotHaveDuplicates();
         List<String> required = document.read("$.components.schemas.ProductView.required");
         assertThat(required).contains("id", "name", "price", "inStock").doesNotContain("category", "description");
         assertThat(document.<Boolean>read("$.components.schemas.ProductView.properties.description.nullable")).isTrue();
+        // Webhooks are for PayPal, not for the generated client
+        Map<String, Object> paths = document.read("$.paths");
+        assertThat(paths).doesNotContainKey("/api/webhooks/{provider}");
         Map<String, Object> categoryView = document.read("$.components.schemas.CategoryView");
         assertThat(categoryView).doesNotContainKey("nullable");
     }

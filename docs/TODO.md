@@ -75,7 +75,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Serveur OIDC de test (`mock-oauth2-server`) dans `compose.yaml` pour développer sans Cognito
 - [x] **Back-office API** : produits, catégories, stock, commandes (expédition, livraison, annulation)
 - [x] Réservation de stock atomique au checkout (pas de survente, testé en concurrence), libération à l'annulation et à l'expiration (job `SKIP LOCKED`, multi-instances)
-- [ ] Remboursements (étape 4, via le module paiement)
+- [x] Remboursements (étape 4, via le module paiement)
 - [ ] Clé d'idempotence sur `POST /api/orders` (double-clic → une seule commande)
 - [ ] Cache du catalogue (`@Cacheable`) si les tests de charge le justifient
 
@@ -96,17 +96,18 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 4 — Paiement (PayPal, extensible)
 
-- [ ] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
-- [ ] Modèle `Payment` / `PaymentAttempt` persisté, indépendant du fournisseur
-- [ ] Adapter **PayPal** (API Orders v2) : `create order` → approbation client → `capture`
-- [ ] Authentification OAuth2 client credentials PayPal avec cache du token
-- [ ] **Clé d'idempotence** sur chaque création/capture (`PayPal-Request-Id`)
-- [ ] **Webhooks** PayPal : endpoint dédié + vérification de signature + traitement idempotent
-- [ ] Réconciliation : job planifié qui vérifie les paiements restés `PENDING`
-- [ ] Remboursements (total / partiel)
-- [ ] Résilience : timeouts, retry contrôlé, circuit breaker sur les appels PayPal
-- [ ] Tests : WireMock pour l'API PayPal + tests manuels sur **PayPal Sandbox**
-- [ ] Vérifier qu'ajouter un nouveau provider (ex. Stripe) = **un nouvel adapter, zéro modification du domaine**
+- [x] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
+- [x] Modèle `Payment` / `PaymentAttempt` persisté, indépendant du fournisseur
+- [x] Adapter **PayPal** (API Orders v2) : `create order` → approbation client (PayPal JS SDK Buttons) → `capture`
+- [x] Authentification OAuth2 client credentials PayPal avec cache du token
+- [x] **Clé d'idempotence** sur chaque création/capture/remboursement (`PayPal-Request-Id`)
+- [x] **Webhooks** PayPal : endpoint dédié + vérification de signature + traitement idempotent
+- [x] Réconciliation : job planifié qui vérifie les paiements restés `PENDING`
+- [x] Remboursements (total / partiel) + remboursement automatique d'un paiement capturé sur une commande expirée
+- [x] Résilience : timeouts, retry contrôlé, circuit breaker sur les appels PayPal
+- [x] Tests : WireMock pour l'API PayPal
+- [ ] Tests manuels sur **PayPal Sandbox** (app sandbox + webhook à créer, cf. README)
+- [ ] Vérifier qu'ajouter un nouveau provider (ex. Stripe) = **un nouvel adapter, zéro modification du domaine** (étape 10)
 
 ## Étape 5 — Observabilité & métriques
 
@@ -172,7 +173,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 - [ ] Aucune donnée carte stockée (PayPal gère la conformité **PCI-DSS**)
 - [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention
-- [ ] Headers de sécurité (CSP, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
+- [ ] Headers de sécurité (CSP — autoriser `www.paypal.com`, `*.paypal.com`, `*.paypalobjects.com` pour le SDK PayPal —, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
 - [ ] Jetons stockés côté SPA en mémoire (pas de `localStorage`), refresh token rotatif
 - [ ] Revue OWASP Top 10, test de pénétration avant mise en prod
 - [ ] Sauvegardes RDS automatiques + test de restauration
