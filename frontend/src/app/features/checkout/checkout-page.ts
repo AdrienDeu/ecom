@@ -84,6 +84,8 @@ export class CheckoutPage {
   protected readonly adding = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly selectedId = signal<string | null>(null);
+  /** One key per visit: a double click or a retry after a network error places a single order. */
+  private readonly idempotencyKey = crypto.randomUUID();
 
   protected readonly addresses = resource({
     loader: async () => {
@@ -113,7 +115,7 @@ export class CheckoutPage {
       return;
     }
     await this.run(async () => {
-      const order = await this.api.invoke(orderCheckout, { body: { addressId } });
+      const order = await this.api.invoke(orderCheckout, { 'Idempotency-Key': this.idempotencyKey, body: { addressId } });
       this.cart.reset();
       await this.router.navigate(['/account/orders', order.id], { queryParams: { created: 1 } });
     });

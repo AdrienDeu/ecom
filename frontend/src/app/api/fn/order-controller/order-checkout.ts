@@ -11,12 +11,14 @@ import { CheckoutRequest } from '../../models/checkout-request';
 import { OrderView } from '../../models/order-view';
 
 export interface OrderCheckout$Params {
+  'Idempotency-Key'?: string;
       body: CheckoutRequest
 }
 
 export function orderCheckout(http: HttpClient, rootUrl: string, params: OrderCheckout$Params, context?: HttpContext): Observable<StrictHttpResponse<OrderView>> {
   const rb = new RequestBuilder(rootUrl, orderCheckout.PATH, 'post');
   if (params) {
+    rb.header('Idempotency-Key', params['Idempotency-Key'], {});
     rb.body(params.body, 'application/json');
   }
 

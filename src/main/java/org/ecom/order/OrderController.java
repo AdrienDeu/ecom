@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,11 +32,15 @@ class OrderController {
         this.orders = orders;
     }
 
-    /** Checkout of the signed-in customer's cart. */
+    /**
+     * Checkout of the signed-in customer's cart. Sending the same {@code Idempotency-Key} again returns the order
+     * already placed with it.
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    OrderView checkout(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CheckoutRequest request) {
-        return orders.checkout(jwt.getSubject(), request.addressId());
+    OrderView checkout(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody CheckoutRequest request,
+                       @RequestHeader(name = "Idempotency-Key", required = false) UUID idempotencyKey) {
+        return orders.checkout(jwt.getSubject(), request.addressId(), idempotencyKey);
     }
 
     @GetMapping

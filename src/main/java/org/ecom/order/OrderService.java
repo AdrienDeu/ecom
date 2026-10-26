@@ -3,6 +3,7 @@ package org.ecom.order;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Optional;
 import java.util.UUID;
 
 import io.micrometer.core.instrument.Counter;
@@ -18,12 +19,14 @@ import org.ecom.shared.web.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class OrderService {
@@ -35,19 +38,21 @@ public class OrderService {
     private final CatalogService catalog;
     private final InventoryService inventory;
     private final AddressService addresses;
+    private final TransactionTemplate tx;
     private final Clock clock;
     private final Duration reservationTtl;
     private final Counter placedOrders;
     private final Counter expiredOrders;
 
     OrderService(OrderRepository orders, CartService carts, CatalogService catalog, InventoryService inventory,
-                 AddressService addresses, Clock clock,
+                 AddressService addresses, TransactionTemplate tx, Clock clock,
                  @Value("${ecom.order.reservation-ttl:PT30M}") Duration reservationTtl, MeterRegistry registry) {
         this.orders = orders;
         this.carts = carts;
         this.catalog = catalog;
         this.inventory = inventory;
         this.addresses = addresses;
+        this.tx = tx;
         this.clock = clock;
         this.reservationTtl = reservationTtl;
         this.placedOrders = Counter.builder("ecom.orders.placed").description("Orders placed at checkout").register(registry);
@@ -59,9 +64,31 @@ public class OrderService {
     /**
      * Turns the customer's cart into an order: prices are frozen and stock is reserved until the order is paid or
      * expires. Any unavailable line rolls the whole checkout back.
+     * <p>
+     * With an idempotency key, a retried checkout (double click, network retry) returns the order already placed
+     * with that key instead of placing a second one, even when both requests run concurrently.
      */
-    @Transactional
-    public OrderView checkout(String customerId, UUID addressId) {
+    public OrderView checkout(String customerId, UUID addressId, UUID idempotencyKey) {
+        if (idempotencyKey == null) {
+            return tx.execute(status -> placeOrder(customerId, addressId, null));
+        }
+        var previous = previousOrder(customerId, idempotencyKey);
+        if (previous.isPresent()) {
+            return previous.get();
+        }
+        try {
+            return tx.execute(status -> placeOrder(customerId, addressId, idempotencyKey));
+        } catch (DataIntegrityViolationException e) {
+            // A concurrent request with the same key placed the order first: this one was rolled back
+            return previousOrder(customerId, idempotencyKey).orElseThrow(() -> e);
+        }
+    }
+
+    private Optional<OrderView> previousOrder(String customerId, UUID idempotencyKey) {
+        return tx.execute(status -> orders.findByCustomerIdAndIdempotencyKey(customerId, idempotencyKey).map(OrderView::of));
+    }
+
+    private OrderView placeOrder(String customerId, UUID addressId, UUID idempotencyKey) {
         var owner = CartOwner.customer(customerId);
         var items = carts.items(owner);
         if (items.isEmpty()) {
@@ -80,8 +107,9 @@ public class OrderService {
             lines.add(new OrderLine(product.id(), product.sku(), product.name(), product.price(), item.quantity()));
         }
 
-        var order = orders.save(new CustomerOrder(OrderReferences.next(), customerId, shippingAddress, lines,
-                clock.instant().plus(reservationTtl)));
+        // Flushed now so that a duplicate idempotency key fails here, before the cart is cleared
+        var order = orders.saveAndFlush(new CustomerOrder(OrderReferences.next(), customerId, shippingAddress, lines,
+                clock.instant().plus(reservationTtl), idempotencyKey));
         afterCommit(() -> {
             carts.clear(owner);
             placedOrders.increment();

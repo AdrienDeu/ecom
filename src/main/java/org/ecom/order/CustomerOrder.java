@@ -59,6 +59,8 @@ class CustomerOrder {
 
     private Instant expiresAt;
 
+    private UUID idempotencyKey;
+
     @Version
     private long version;
 
@@ -66,7 +68,7 @@ class CustomerOrder {
     }
 
     CustomerOrder(String reference, String customerId, PostalAddress shippingAddress, List<OrderLine> lines,
-                  Instant expiresAt) {
+                  Instant expiresAt, UUID idempotencyKey) {
         if (lines.isEmpty()) {
             throw new IllegalArgumentException("An order needs at least one line");
         }
@@ -77,6 +79,7 @@ class CustomerOrder {
         this.total = lines.stream().map(OrderLine::lineTotal).reduce(Money::plus).orElseThrow();
         this.status = OrderStatus.CREATED;
         this.expiresAt = expiresAt;
+        this.idempotencyKey = idempotencyKey;
     }
 
     void transitionTo(OrderStatus target) {
