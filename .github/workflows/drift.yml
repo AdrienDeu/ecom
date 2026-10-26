@@ -1,0 +1,92 @@
+name: Drift
+
+# Chaque jour, plan de chaque environnement contre l'état réel : un changement fait hors OpenTofu (console, CLI)
+# fait échouer le workflow (notification GitHub). Rôle en lecture seule, assumable depuis main.
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  TOFU_VERSION: 1.13.1
+  TF_IN_AUTOMATION: 'true'
+
+jobs:
+  plan:
+    name: Drift (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [staging, production]
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ENVIRONMENT: ${{ matrix.environment }}
+      ROLE_ARN: ${{ matrix.environment == 'staging' && vars.AWS_PLAN_ROLE_ARN_STAGING || vars.AWS_PLAN_ROLE_ARN_PRODUCTION }}
+      TF_VAR_account_id: ${{ matrix.environment == 'staging' && vars.AWS_ACCOUNT_ID_STAGING || vars.AWS_ACCOUNT_ID_PRODUCTION }}
+    defaults:
+      run:
+        working-directory: infra/envs/${{ matrix.environment }}
+    steps:
+      - name: Check bootstrap
+        id: bootstrap
+        working-directory: .
+        run: |
+          if [ -n "$ROLE_ARN" ] && [ -n "$TF_VAR_account_id" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$ENVIRONMENT non amorcé (variables AWS_PLAN_ROLE_ARN_* / AWS_ACCOUNT_ID_* absentes) : ignoré"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.bootstrap.outputs.ready
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        if: steps.bootstrap.outputs.ready
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        if: steps.bootstrap.outputs.ready
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          role-session-name: tofu-drift-${{ github.run_id }}
+          aws-region: eu-west-3
+
+      - name: tofu init
+        if: steps.bootstrap.outputs.ready
+        run: tofu init -input=false -lockfile=readonly -backend-config="bucket=ecom-tofu-state-${TF_VAR_account_id}"
+
+      # Image en service : seule la CD la change, elle ne doit pas apparaître comme une dérive
+      - name: tofu plan
+        if: steps.bootstrap.outputs.ready
+        run: |
+          TF_VAR_image=$(tofu output -raw image)
+          export TF_VAR_image
+          set +e
+          tofu plan -input=false -lock=false -no-color -detailed-exitcode > plan.log 2>&1
+          status=$?
+          set -e
+          cat plan.log
+          case "$status" in
+            0) echo "### \`$ENVIRONMENT\` : aucune dérive" >> "$GITHUB_STEP_SUMMARY" ;;
+            2)
+              {
+                echo "### \`$ENVIRONMENT\` : dérive détectée — $(grep -E '^Plan: ' plan.log)"
+                echo '```'
+                sed -n '/^OpenTofu used\|^OpenTofu will/,$p' plan.log | head -c 60000
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::Écart en $ENVIRONMENT : changement manuel à annuler ou à reporter dans le code, ou merge pas encore déployé"
+              exit 1 ;;
+            *) exit 1 ;;
+          esac

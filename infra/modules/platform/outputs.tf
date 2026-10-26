@@ -23,6 +23,11 @@ output "ecs_service_name" {
   value = module.backend.service_name
 }
 
+output "task_definition_arn" {
+  description = "Révision de tâche dont la CD attend le déploiement complet."
+  value       = module.backend.task_definition_arn
+}
+
 output "cognito_user_pool_id" {
   value = module.identity.user_pool_id
 }

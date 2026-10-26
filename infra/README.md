@@ -62,7 +62,7 @@ Le rôle *plan* (lecture seule) n'est assumable que depuis une PR ou `main` ; le
 
 ## 2. Premier déploiement d'un environnement
 
-Les applies suivants passent par la CD (étape 8) ; ce premier déploiement se fait à la main, avec le profil administrateur.
+Ce premier déploiement se fait à la main, avec le profil administrateur ; les suivants passent par la CD (§4).
 
 ```bash
 cd infra/envs/staging
@@ -90,7 +90,7 @@ tofu init -backend-config="bucket=ecom-tofu-state-$TF_VAR_account_id"
 
    Flyway applique les migrations au démarrage des tâches.
 
-3. **SPA** : le build est le même pour tous les environnements, `config.json` est écrit par OpenTofu et ne doit pas être écrasé.
+3. **SPA** (ou laisser la CD s'en charger au prochain merge) : le build est le même pour tous les environnements, `config.json` est écrit par OpenTofu et ne doit pas être écrasé.
 
    ```bash
    (cd frontend && npm ci && npm run build)
@@ -118,7 +118,27 @@ aws secretsmanager put-secret-value --secret-id "$(tofu output -raw paypal_secre
 
 Puis `paypal_enabled = true` dans `terraform.tfvars` (PR → plan → CD). Sans valeur dans le secret, les nouvelles tâches ne démarrent pas et le circuit breaker ECS revient à la révision précédente. URL du webhook à déclarer chez PayPal : `https://<domain_name>/api/webhooks/paypal`.
 
-## 4. Vérifications locales
+## 4. Déploiements (CD)
+
+Chaque merge dans `main` déclenche `cd.yml` :
+
+1. build unique de l'image (archive `docker save`, digest calculé) et de la SPA ;
+2. `deploy.yml` en **staging** : push dans ECR sous `sha-<commit>` (le digest poussé doit être celui du build), signature cosign sans clé + attestation du SBOM, `tofu apply` avec l'image référencée par digest, attente du déploiement ECS, publication de la SPA, smoke tests ;
+3. même chose en **production** après approbation dans l'environnement GitHub.
+
+ECS revient seul à la révision précédente si les nouvelles tâches ne deviennent pas saines (circuit breaker) ou si les alarmes de déploiement (5xx, p95 > 1 s) se déclenchent ; le job échoue alors. Revenir à une version antérieure : `git revert` dans `main` (nouveau déploiement), ou relancer le run de la CD de cette version tant que ses artefacts existent (7 jours).
+
+Vérifier la signature d'une image :
+
+```bash
+cosign verify <repo>@<digest> \
+  --certificate-identity-regexp '^https://github.com/AdrienDeu/ecom/\.github/workflows/deploy\.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+```
+
+`drift.yml` compare chaque jour l'état réel au code (rôle en lecture seule) et échoue en cas d'écart : changement manuel à annuler ou à reporter dans le code, ou merge pas encore déployé en production.
+
+## 5. Vérifications locales
 
 Les mêmes que le job *Infra* de la CI :
 

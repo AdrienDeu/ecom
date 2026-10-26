@@ -568,8 +568,9 @@ Dashboards Grafana versionnés dans `observability/grafana/dashboards/` et provi
 | `ci.yml`         | PR + push `main`/`dev`              | jobs parallèles, détaillés ci-dessous |
 | `codeql.yml`     | PR + push + hebdomadaire            | CodeQL `security-extended` : Java, TypeScript, workflows GitHub Actions |
 | `infra-ci.yml`   | PR modifiant `infra/**`             | `tofu fmt -check`, `tofu validate` (sans backend), `tflint`, `trivy config` ; `tofu plan` de chaque environnement commenté dans la PR (rôle en lecture seule via OIDC) |
-| `cd.yml`         | push `main` (étape 8)               | push image ECR (tag SHA) + cosign + SBOM → `tofu apply` staging → mise à jour du service ECS → SPA vers S3 + invalidation CloudFront → smoke/E2E → approbation → prod |
-| `drift.yml`      | planifié (quotidien, étape 8)       | `tofu plan -detailed-exitcode` par environnement, alerte en cas de dérive |
+| `cd.yml`         | push `main`, manuel                 | build unique de l'image (archive + digest) et de la SPA, puis `deploy.yml` en staging, puis en production après approbation |
+| `deploy.yml`     | appelé par `cd.yml`                 | push ECR (tag `sha-<commit>`, digest vérifié) + signature cosign + attestation SBOM → `tofu apply` → attente du déploiement ECS (échec si rollback) → SPA vers S3 + invalidation CloudFront → smoke tests |
+| `drift.yml`      | planifié (quotidien), manuel        | `tofu plan -detailed-exitcode` par environnement (rôle lecture seule) ; échec en cas de dérive |
 | `release.yml`    | push `main` (étape 8)               | release-please : tag SemVer + changelog |
 
 Jobs de `ci.yml` :

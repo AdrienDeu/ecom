@@ -226,6 +226,51 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
+# --- Alarmes de déploiement ---
+
+# Surveillées par ECS pendant et juste après un déploiement : en alarme, retour à la révision précédente.
+# Plus réactives que les alarmes de notification (module observability), sans action SNS.
+locals {
+  deployment_alarms = {
+    target-5xx = {
+      description        = "Erreurs 5xx renvoyées par l'application"
+      metric             = "HTTPCode_Target_5XX_Count"
+      statistic          = "Sum"
+      extended_statistic = null
+      threshold          = 20
+    }
+    target-latency-p95 = {
+      description        = "p95 du temps de réponse de l'application au-dessus de 1 s"
+      metric             = "TargetResponseTime"
+      statistic          = null
+      extended_statistic = "p95"
+      threshold          = 1
+    }
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "deployment" {
+  for_each = local.deployment_alarms
+
+  alarm_name          = "${var.name}-deployment-${each.key}"
+  alarm_description   = "Rollback de déploiement ECS : ${each.value.description}"
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = each.value.metric
+  statistic           = each.value.statistic
+  extended_statistic  = each.value.extended_statistic
+  comparison_operator = "GreaterThanThreshold"
+  threshold           = each.value.threshold
+  period              = 60
+  evaluation_periods  = 3
+  datapoints_to_alarm = 2
+  treat_missing_data  = "notBreaching"
+
+  dimensions = {
+    LoadBalancer = aws_lb.this.arn_suffix
+    TargetGroup  = aws_lb_target_group.app.arn_suffix
+  }
+}
+
 resource "aws_ecs_service" "app" {
   name                   = "app"
   cluster                = aws_ecs_cluster.this.id
@@ -241,10 +286,17 @@ resource "aws_ecs_service" "app" {
   deployment_maximum_percent         = 200
   availability_zone_rebalancing      = "ENABLED"
 
-  # Déploiement en échec (tâches qui ne deviennent pas saines) : retour automatique à la version précédente
+  # Tâches qui ne deviennent pas saines : retour automatique à la version précédente
   deployment_circuit_breaker {
     enable   = true
     rollback = true
+  }
+
+  # Tâches saines mais application dégradée (erreurs, lenteur) : retour à la révision précédente
+  alarms {
+    alarm_names = [for alarm in aws_cloudwatch_metric_alarm.deployment : alarm.alarm_name]
+    enable      = true
+    rollback    = true
   }
 
   network_configuration {
