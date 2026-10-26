@@ -78,4 +78,111 @@ jobs:
           docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" \
             config --severity HIGH,CRITICAL --exit-code 1 infra
 
-      # tofu plan commenté dans la PR : ajouté à l'étape 7, avec le rôle IAM en lecture seule assumé par OIDC
+  # Plan de chaque environnement commenté dans la PR, avec le rôle en lecture seule créé par infra/bootstrap.
+  # Sans environnement GitHub : le jeton OIDC porte alors le sub "pull_request" accepté par ce rôle.
+  # Ignoré tant que le compte n'est pas amorcé (variables absentes) et pour les PR de forks et de Dependabot (pas de jeton OIDC).
+  plan:
+    name: Plan (${{ matrix.environment }})
+    needs: validate
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [staging, production]
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    env:
+      ENVIRONMENT: ${{ matrix.environment }}
+      ROLE_ARN: ${{ matrix.environment == 'staging' && vars.AWS_PLAN_ROLE_ARN_STAGING || vars.AWS_PLAN_ROLE_ARN_PRODUCTION }}
+      TF_VAR_account_id: ${{ matrix.environment == 'staging' && vars.AWS_ACCOUNT_ID_STAGING || vars.AWS_ACCOUNT_ID_PRODUCTION }}
+      TF_IN_AUTOMATION: 'true'
+    steps:
+      - name: Check bootstrap
+        id: bootstrap
+        run: |
+          if [ -n "$ROLE_ARN" ] && [ -n "$TF_VAR_account_id" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::$ENVIRONMENT non amorcé (variables AWS_PLAN_ROLE_ARN_* / AWS_ACCOUNT_ID_* absentes) : plan ignoré"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.bootstrap.outputs.ready
+        with:
+          persist-credentials: false
+
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        if: steps.bootstrap.outputs.ready
+        with:
+          tofu_version: ${{ env.TOFU_VERSION }}
+          tofu_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        if: steps.bootstrap.outputs.ready
+        with:
+          role-to-assume: ${{ env.ROLE_ARN }}
+          role-session-name: tofu-plan-${{ github.run_id }}
+          aws-region: eu-west-3
+
+      - name: tofu init
+        if: steps.bootstrap.outputs.ready
+        working-directory: infra/envs/${{ matrix.environment }}
+        run: tofu init -input=false -lockfile=readonly -backend-config="bucket=ecom-tofu-state-${TF_VAR_account_id}"
+
+      # Image en service (sortie de l'état), ou image fictive avant le premier déploiement
+      - name: tofu plan
+        id: plan
+        if: steps.bootstrap.outputs.ready
+        working-directory: infra/envs/${{ matrix.environment }}
+        run: |
+          TF_VAR_image=$(tofu output -raw image 2>/dev/null) || TF_VAR_image="not-deployed-yet:none"
+          export TF_VAR_image
+          set +e
+          tofu plan -input=false -lock=false -no-color -detailed-exitcode > plan.log 2>&1
+          status=$?
+          set -e
+          cat plan.log
+          echo "exitcode=$status" >> "$GITHUB_OUTPUT"
+          # 0 : aucun changement, 2 : changements ; 1 : erreur (le commentaire est publié, puis le job échoue)
+          [ "$status" -ne 1 ]
+
+      - name: Comment plan
+        if: always() && steps.plan.outputs.exitcode != ''
+        working-directory: infra/envs/${{ matrix.environment }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EXIT_CODE: ${{ steps.plan.outputs.exitcode }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          marker="<!-- tofu-plan:${ENVIRONMENT} -->"
+          case "$EXIT_CODE" in
+            0) result="aucun changement" ;;
+            2) result="$(grep -E '^Plan: ' plan.log || echo 'changements')" ;;
+            *) result="**échec**" ;;
+          esac
+          {
+            echo "$marker"
+            echo "### tofu plan — \`${ENVIRONMENT}\` : ${result}"
+            echo
+            echo "<details><summary>Détail (${HEAD_SHA::7})</summary>"
+            echo
+            echo '```'
+            # Sans le rafraîchissement de l'état ; fin du journal en cas d'erreur. Limite d'un commentaire : 65 536 caractères
+            details=$(sed -n '/^OpenTofu used\|^OpenTofu will\|^No changes/,$p' plan.log)
+            [ -n "$details" ] && [ "$EXIT_CODE" != 1 ] || details=$(tail -n 60 plan.log)
+            printf '%s\n' "$details" | head -c 60000
+            echo '```'
+            echo "</details>"
+          } > comment.md
+          comment_id=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"${marker}\"))) | .id" | head -1)
+          if [ -n "$comment_id" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" -F body=@comment.md >/dev/null
+          else
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" -F body=@comment.md >/dev/null
+          fi

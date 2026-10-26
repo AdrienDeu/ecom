@@ -567,7 +567,7 @@ Dashboards Grafana versionnés dans `observability/grafana/dashboards/` et provi
 |------------------|-------------------------------------|---------|
 | `ci.yml`         | PR + push `main`/`dev`              | jobs parallèles, détaillés ci-dessous |
 | `codeql.yml`     | PR + push + hebdomadaire            | CodeQL `security-extended` : Java, TypeScript, workflows GitHub Actions |
-| `infra-ci.yml`   | PR modifiant `infra/**`             | `tofu fmt -check`, `tofu validate` (sans backend), `tflint`, `trivy config` ; `tofu plan` commenté dans la PR à l'étape 7 |
+| `infra-ci.yml`   | PR modifiant `infra/**`             | `tofu fmt -check`, `tofu validate` (sans backend), `tflint`, `trivy config` ; `tofu plan` de chaque environnement commenté dans la PR (rôle en lecture seule via OIDC) |
 | `cd.yml`         | push `main` (étape 8)               | push image ECR (tag SHA) + cosign + SBOM → `tofu apply` staging → mise à jour du service ECS → SPA vers S3 + invalidation CloudFront → smoke/E2E → approbation → prod |
 | `drift.yml`      | planifié (quotidien, étape 8)       | `tofu plan -detailed-exitcode` par environnement, alerte en cas de dérive |
 | `release.yml`    | push `main` (étape 8)               | release-please : tag SemVer + changelog |
@@ -606,15 +606,16 @@ En local : `./mvnw verify` exécute les mêmes contrôles que le job backend ; `
 infra/
 ├── bootstrap/           # bucket S3 d'état + clé KMS + OIDC GitHub (appliqué une fois)
 ├── modules/
+│   ├── platform/        # un environnement complet, seul module appelé par envs/*
 │   ├── network/         # VPC, sous-réseaux, NAT, VPC endpoints
 │   ├── database/        # RDS PostgreSQL, backups, chiffrement KMS
 │   ├── cache/           # ElastiCache Valkey/Redis
 │   ├── registry/        # ECR
 │   ├── backend/         # ECS cluster, service Fargate, ALB, autoscaling, rôles IAM de tâche
 │   ├── frontend/        # S3 + CloudFront (OAC)
-│   ├── edge/            # Route 53, ACM, WAF
+│   ├── edge/            # ACM et WAF de CloudFront (us-east-1)
 │   ├── identity/        # Cognito user pool + client SPA
-│   ├── secrets/         # Secrets Manager (PayPal, BDD)
+│   ├── secrets/         # Secrets Manager (PayPal ; BDD via le secret géré par RDS)
 │   └── observability/   # Managed Prometheus, Managed Grafana, CloudWatch
 └── envs/
     ├── staging/
@@ -623,6 +624,8 @@ infra/
     │   └── terraform.tfvars
     └── production/
 ```
+
+Procédure d'amorçage et de premier déploiement : [infra/README.md](../infra/README.md).
 
 ### 8.2 Règles
 
@@ -636,17 +639,17 @@ infra/
 
 ```hcl
 terraform {
-  required_version = "~> 1.10"
+  required_version = ">= 1.10"
 
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 6.0"
+      version = "~> 6.68.0"
     }
   }
 
+  # bucket fourni à l'init : tofu init -backend-config="bucket=ecom-tofu-state-<account-id>"
   backend "s3" {
-    bucket       = "ecom-tofu-state-<account-id>"
     key          = "staging/terraform.tfstate"
     region       = "eu-west-3"
     encrypt      = true
@@ -663,10 +666,12 @@ terraform {
       keys = key_provider.aws_kms.main
     }
     state {
-      method = method.aes_gcm.main
+      method   = method.aes_gcm.main
+      enforced = true
     }
     plan {
-      method = method.aes_gcm.main
+      method   = method.aes_gcm.main
+      enforced = true
     }
   }
 }
