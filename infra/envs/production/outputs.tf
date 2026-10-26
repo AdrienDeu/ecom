@@ -22,6 +22,10 @@ output "ecs_service_name" {
   value = module.platform.ecs_service_name
 }
 
+output "task_definition_arn" {
+  value = module.platform.task_definition_arn
+}
+
 output "cognito_user_pool_id" {
   value = module.platform.cognito_user_pool_id
 }

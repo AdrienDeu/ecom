@@ -167,16 +167,20 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 
 ## Étape 8 — CD
 
-- [ ] Workflow `cd.yml` sur merge dans `main` :
-  - [ ] Publication de l'image taguée par SHA + version, **signature cosign** + **SBOM** (SBOM CycloneDX déjà généré par Maven : `META-INF/sbom/application.cdx.json`)
-  - [ ] Push de l'image dans ECR, `tofu apply` staging → nouvelle révision de tâche ECS
-  - [ ] SPA : build → sync S3 → invalidation CloudFront
-  - [ ] Migrations Flyway automatiques au démarrage (ou job dédié)
-  - [ ] Smoke tests + tests E2E (Playwright) sur staging, paiement PayPal Sandbox inclus
-  - [ ] Approbation manuelle (environnement GitHub `production`) → déploiement prod
-- [ ] Déploiement sans interruption : rolling ECS avec **deployment circuit breaker** (ou blue/green via CodeDeploy)
-- [ ] Rollback automatique si healthcheck ou alarmes CloudWatch post-déploiement en échec
+- [x] Workflow `cd.yml` sur merge dans `main` (déploiement par environnement dans le workflow réutilisable `deploy.yml`) :
+  - [x] Image construite une fois, taguée `sha-<commit>`, **signée avec cosign** (sans clé, OIDC) + **SBOM** CycloneDX attesté ; même digest dans chaque environnement (vérifié au push)
+  - [ ] Tag de version SemVer sur l'image (avec release-please)
+  - [x] Push de l'image dans ECR, `tofu apply` staging → nouvelle révision de tâche ECS, attente du déploiement complet
+  - [x] SPA : build unique → sync S3 (bundles hachés en cache long, `index.html` en `no-cache`, `config.json` préservé) → invalidation CloudFront
+  - [x] Migrations Flyway automatiques au démarrage
+  - [x] Smoke tests sur l'environnement déployé (SPA, `config.json`, API catalogue)
+  - [ ] Tests E2E (Playwright) sur staging, paiement PayPal Sandbox inclus
+  - [x] Approbation manuelle (environnement GitHub `production`) → déploiement prod
+- [x] Déploiement sans interruption : rolling ECS avec **deployment circuit breaker**
+- [x] Rollback automatique : circuit breaker (tâches non saines) + alarmes de déploiement ECS (5xx, p95 > 1 s) ; la CD échoue si la nouvelle révision n'est pas entièrement déployée
+- [x] Détection de dérive : `drift.yml` quotidien (`tofu plan -detailed-exitcode` par environnement)
 - [ ] Release automatique (tag + changelog) via release-please ou semantic-release
+- [ ] Valider le premier run réel de la CD (après amorçage des comptes, cf. étape 7)
 
 ## Étape 9 — Sécurité & conformité
 
