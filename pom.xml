@@ -207,6 +207,11 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!-- SBOM CycloneDX (config du parent Spring Boot) : embarqué dans le jar et scanné par Trivy en CI -->
+            <plugin>
+                <groupId>org.cyclonedx</groupId>
+                <artifactId>cyclonedx-maven-plugin</artifactId>
+            </plugin>
 
             <!-- Couverture : tests unitaires et d'intégration fusionnés, seuil vérifié au verify -->
             <plugin>

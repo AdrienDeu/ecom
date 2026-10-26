@@ -165,7 +165,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 ## Étape 8 — CD
 
 - [ ] Workflow `cd.yml` sur merge dans `main` :
-  - [ ] Publication de l'image taguée par SHA + version, **signature cosign** + **SBOM**
+  - [ ] Publication de l'image taguée par SHA + version, **signature cosign** + **SBOM** (SBOM CycloneDX déjà généré par Maven : `META-INF/sbom/application.cdx.json`)
   - [ ] Push de l'image dans ECR, `tofu apply` staging → nouvelle révision de tâche ECS
   - [ ] SPA : build → sync S3 → invalidation CloudFront
   - [ ] Migrations Flyway automatiques au démarrage (ou job dédié)

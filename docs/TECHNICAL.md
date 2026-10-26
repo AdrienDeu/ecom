@@ -579,7 +579,7 @@ Jobs de `ci.yml` :
 | **Backend (build & tests)**                 | `./mvnw verify` : Spotless (imports, espaces), tests unitaires + intégration (Testcontainers, WireMock), SpotBugs + FindSecBugs, couverture JaCoCo fusionnée (seuils : 80 % des lignes, 70 % des branches), résumé de couverture dans la PR | oui (ruleset) |
 | **Frontend (lint, test, build)**            | `npm audit` (high), ESLint, Vitest, build de production | oui (ruleset) |
 | API client up to date                       | régénère le client Angular depuis l'OpenAPI écrit par `EcomApplicationIT` et échoue s'il diffère du client commité | oui |
-| Security (dependencies & secrets)           | Trivy `fs` : dépendances Maven/npm, secrets, misconfigurations → onglet Security (SARIF) ; échec sur HIGH/CRITICAL corrigeable ou secret | oui |
+| Security (dependencies & secrets)           | Trivy `sbom` sur le SBOM CycloneDX généré par Maven (arbre exact des dépendances, sans requêtes vers Maven Central qui limite les runners partagés), Trivy `fs` pour npm, secrets et misconfigurations → onglet Security (SARIF) ; échec sur HIGH/CRITICAL corrigeable ou secret | oui |
 | Image OCI (build & scan)                    | `spring-boot:build-image` (Buildpacks Paketo) + Trivy `image` → SARIF ; échec sur CRITICAL corrigeable | oui |
 | Observability (alert rules & dashboards)    | `promtool check rules` + `promtool test rules`, validité des dashboards | oui |
 

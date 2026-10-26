@@ -158,12 +158,30 @@ jobs:
         with:
           persist-credentials: false
 
-      # Rapport complet dans l'onglet Security (code scanning), y compris les failles sans correctif
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Arbre exact des dépendances Maven (SBOM CycloneDX) : Trivy n'a pas à résoudre le pom.xml sur Maven Central,
+      # qui limite le débit des runners partagés (429)
+      - name: Generate SBOM
+        run: ./mvnw -B -ntp generate-resources -Dspotless.check.skip=true
+
+      # Rapports complets dans l'onglet Security (code scanning), y compris les failles sans correctif
       - name: Trivy (SARIF)
         run: |
-          docker run --rm -v "$PWD:/src" -w /src \
-            "$TRIVY_IMAGE" fs --scanners vuln,secret,misconfig --severity MEDIUM,HIGH,CRITICAL \
-            --skip-dirs frontend/node_modules --format sarif --output trivy-fs.sarif .
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" sbom --severity MEDIUM,HIGH,CRITICAL \
+            --format sarif --output trivy-maven.sarif target/classes/META-INF/sbom/application.cdx.json
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln,secret,misconfig --severity MEDIUM,HIGH,CRITICAL \
+            --skip-files pom.xml --skip-dirs frontend/node_modules --skip-dirs target --format sarif --output trivy-fs.sarif .
+
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        if: always() && hashFiles('trivy-maven.sarif') != ''
+        with:
+          sarif_file: trivy-maven.sarif
+          category: trivy-maven
 
       - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         if: always() && hashFiles('trivy-fs.sarif') != ''
@@ -171,12 +189,13 @@ jobs:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
 
-      # Bloquant : vulnérabilité HIGH/CRITICAL ayant un correctif, ou secret commité
+      # Bloquant : vulnérabilité HIGH/CRITICAL ayant un correctif (Maven, npm), ou secret commité
       - name: Trivy (gate)
         run: |
-          docker run --rm -v "$PWD:/src" -w /src \
-            "$TRIVY_IMAGE" fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed \
-            --skip-dirs frontend/node_modules --exit-code 1 .
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" sbom --severity HIGH,CRITICAL --ignore-unfixed \
+            --exit-code 1 target/classes/META-INF/sbom/application.cdx.json
+          docker run --rm -v "$PWD:/src" -w /src "$TRIVY_IMAGE" fs --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed \
+            --skip-files pom.xml --skip-dirs frontend/node_modules --skip-dirs target --exit-code 1 .
 
   image:
     name: Image OCI (build & scan)
