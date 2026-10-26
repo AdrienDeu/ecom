@@ -138,29 +138,32 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Cache Maven et npm, exécution parallèle des jobs
 - [x] Frontend (lint, tests, build, audit npm) — dans `ci.yml` plutôt qu'un workflow filtré par chemins, pour rester un check obligatoire
 - [x] Workflow `infra-ci.yml` sur PR touchant `infra/` : `tofu fmt -check`, `tofu validate`, `tflint`, `trivy config`
-- [ ] `tofu plan` commenté dans la PR (étape 7, rôle IAM lecture seule via OIDC)
+- [x] `tofu plan` commenté dans la PR (job *Plan* de `infra-ci.yml`, rôle IAM lecture seule via OIDC ; ignoré tant que le compte n'est pas amorcé)
 - [ ] Ajouter les nouveaux jobs aux checks obligatoires des rulesets `main` et `dev`
 
 ## Étape 7 — Infrastructure (OpenTofu)
 
-- [ ] Bootstrap (une fois, à la main) : bucket S3 d'état (versionné, chiffré KMS) + clé KMS de chiffrement d'état
-- [ ] Backend S3 avec verrouillage natif (`use_lockfile = true`) + **chiffrement de l'état** OpenTofu via KMS
-- [ ] Comptes AWS séparés `staging` / `production` (AWS Organizations) — recommandé
-- [ ] Fournisseur OIDC GitHub dans IAM + un rôle IAM par environnement (plan en lecture seule / apply), restreint au repo et à l'environnement
-- [ ] Modules AWS :
-  - [ ] `network` : VPC, sous-réseaux publics/privés sur 2–3 AZ, NAT, VPC endpoints (ECR, S3, Secrets Manager)
-  - [ ] `database` : RDS PostgreSQL Multi-AZ (prod), backups automatiques, chiffrement KMS
-  - [ ] `cache` : ElastiCache (Valkey/Redis)
-  - [ ] `registry` : ECR (scan à l'envoi, tags immuables)
-  - [ ] `backend` : ECS Fargate + ALB + autoscaling
-  - [ ] `identity` : Cognito User Pool, groupes `CUSTOMER`/`ADMIN`, client SPA, domaine Managed Login
-  - [ ] `frontend` : bucket S3 privé + CloudFront (OAC) + ACM
-  - [ ] `edge` : Route 53, certificats ACM, AWS WAF
-  - [ ] `secrets` : Secrets Manager (PayPal, BDD)
-  - [ ] `observability` : Amazon Managed Prometheus + Amazon Managed Grafana, CloudWatch Logs, X-Ray/ADOT
-- [ ] Un répertoire par environnement (`envs/staging`, `envs/production`) réutilisant les modules
-- [ ] Versions de providers épinglées + `.terraform.lock.hcl` committé
-- [ ] Secrets PayPal (client id/secret, webhook id) dans Secrets Manager, injectés dans la tâche ECS
+> Code complet et vérifié (`fmt`, `validate`, `tflint`, `trivy config`) ; rien n'est encore appliqué. Procédure : [infra/README.md](../infra/README.md).
+
+- [x] Bootstrap (une fois par compte, à la main) : bucket S3 d'état (versionné, SSE-KMS, TLS obligatoire) + clé KMS de chiffrement d'état, état migré dans le bucket
+- [x] Backend S3 avec verrouillage natif (`use_lockfile = true`) + **chiffrement de l'état et des plans** OpenTofu via KMS (`enforced`)
+- [ ] Comptes AWS séparés `staging` / `production` (AWS Organizations) — le code l'impose (`allowed_account_ids`), comptes à créer
+- [x] Fournisseur OIDC GitHub dans IAM + rôles par environnement : `plan` (lecture seule, PR et `main`) / `apply` (environnement GitHub uniquement)
+- [x] Modules AWS (assemblés par `platform`, seul module appelé par les environnements) :
+  - [x] `network` : VPC, sous-réseaux public/app/data sur 2–3 AZ, NAT (une ou par AZ), VPC endpoints (ECR, S3, Secrets Manager, logs…), flow logs
+  - [x] `database` : RDS PostgreSQL Multi-AZ (prod), backups automatiques, chiffrement KMS, mot de passe géré par RDS
+  - [x] `cache` : ElastiCache Valkey (TLS, jeton d'authentification)
+  - [x] `registry` : ECR (scan à l'envoi, tags immuables)
+  - [x] `backend` : ECS Fargate (app + collecteur ADOT) + ALB (limité à CloudFront) + autoscaling CPU/requêtes + circuit breaker
+  - [x] `identity` : Cognito User Pool, groupes `CUSTOMER`/`ADMIN`, client SPA, domaine Managed Login
+  - [x] `frontend` : bucket S3 privé + CloudFront (OAC), `/api/*` vers l'ALB, en-têtes de sécurité (CSP PayPal, HSTS), `config.json`
+  - [x] `edge` : certificat ACM et AWS WAF (règles gérées + rate limiting paiement et télémétrie ; le login est chez Cognito) en us-east-1, enregistrements Route 53
+  - [x] `secrets` : Secrets Manager (PayPal ; BDD via le secret géré par RDS)
+  - [x] `observability` : Amazon Managed Prometheus (règles d'alerte d'`observability/`), Managed Grafana (optionnel), CloudWatch Logs et alarmes, X-Ray via ADOT, SNS
+- [x] Un répertoire par environnement (`envs/staging`, `envs/production`) réutilisant les modules, seules les dimensions diffèrent
+- [x] Versions de providers épinglées + `.terraform.lock.hcl` committé
+- [x] Secrets PayPal (client id/secret, webhook id) dans Secrets Manager, injectés dans la tâche ECS (`paypal_enabled`)
+- [ ] Appliquer le bootstrap puis les environnements (zone Route 53 déléguée, domaine réel dans `terraform.tfvars`)
 
 ## Étape 8 — CD
 
