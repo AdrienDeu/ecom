@@ -93,6 +93,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [ ] Tests E2E Playwright versionnés et exécutés en CD contre staging (étape 8)
 - [x] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
 - [x] Images produits : envoi depuis l'ordinateur dans le back-office (JPEG, PNG, WebP, 5 Mo ; format vérifié sur le contenu), disque en local, bucket S3 servi par CloudFront sous `/media/*` en AWS
+- [x] Images optimisées dans le navigateur avant l'envoi : tout format lisible (photo de téléphone, BMP, GIF, HEIC sous Safari…), redressée, 1 600 px au plus, WebP (JPEG si le navigateur ne sait pas encoder le WebP), métadonnées supprimées
 - [x] WAF : corps de plus de 8 Ko toujours bloqués, sauf l'envoi d'une image produit (règle `body-size-limit` à la place de `SizeRestrictions_BODY`)
 
 ### 3c — Prestations et devis
