@@ -14,6 +14,11 @@ updates:
         patterns: ["org.springframework*"]
       maven-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # Doit suivre l'API OpenTelemetry de Spring Boot (cf. pom.xml) : seuls les correctifs sont sûrs, le reste se
+      # monte avec Spring Boot
+      - dependency-name: io.opentelemetry.instrumentation:opentelemetry-logback-appender-1.0
+        update-types: [version-update:semver-minor, version-update:semver-major]
 
   - package-ecosystem: github-actions
     directory: /
