@@ -94,8 +94,18 @@ Règles :
 
 - Une évolution utile à toutes les boutiques (fonctionnalité, correctif, sécurité) se fait **dans `dev`**, jamais
   dans une branche boutique.
-- La plateforme descend dans les boutiques par une PR `dev` → `shop/<nom>` fusionnée en *merge commit* (pas de
-  squash ni de rebase), pour garder l'historique commun et des fusions sans conflit.
+- La plateforme descend dans les boutiques par une branche de synchronisation : `sync/<nom>` créée depuis
+  `shop/<nom>`, dans laquelle on fusionne `dev`, puis PR `sync/<nom>` → `shop/<nom>` fusionnée en *merge commit*
+  (pas de squash ni de rebase), pour garder l'historique commun et des fusions sans conflit. Une PR directe
+  `dev` → `shop/<nom>` ne peut pas être « à jour » avec la boutique, comme l'exigent les checks obligatoires.
+
+  ```bash
+  git fetch origin
+  git switch -c sync/<nom> origin/shop/<nom>
+  git merge --no-ff origin/dev
+  git push -u origin sync/<nom>
+  gh pr create --base shop/<nom> --title "chore: sync platform from dev into shop/<nom>"
+  ```
 - Le travail propre à une boutique se fait dans `feat/<nom>-*` à partir de `shop/<nom>`, en PR vers cette branche.
 - Nouvelle boutique : créer `shop/<nom>` depuis `dev`, puis personnaliser les fichiers ci-dessus.
 
