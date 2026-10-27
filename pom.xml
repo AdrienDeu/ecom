@@ -39,7 +39,9 @@
         <!-- Seuils de couverture (tests unitaires + intégration) en dessous desquels le build échoue -->
         <jacoco.minimum-line-coverage>0.80</jacoco.minimum-line-coverage>
         <jacoco.minimum-branch-coverage>0.70</jacoco.minimum-branch-coverage>
-        <opentelemetry-instrumentation.version>2.33.0-alpha</opentelemetry-instrumentation.version>
+        <!-- Doit viser l'API OpenTelemetry fournie par Spring Boot (1.62 pour Boot 4.1) : 2.28.x. Une version plus récente
+             empêche l'application de démarrer en local (NoClassDefFoundError), sans qu'aucun test ne le voie. -->
+        <opentelemetry-instrumentation.version>2.28.1-alpha</opentelemetry-instrumentation.version>
     </properties>
     <dependencies>
         <!-- Web -->
