@@ -1,42 +1,103 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -3rem;
+  z-index: 20;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--on-accent);
+
+  &:focus {
+    top: 0.5rem;
+  }
+}
+
 .site-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: var(--surface);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
   border-bottom: 1px solid var(--border);
 }
 
 .site-header__inner {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  min-height: 3.5rem;
+  gap: 0.5rem 2rem;
+  min-height: 4rem;
   flex-wrap: wrap;
+  padding-block: 0.5rem;
 }
 
 .brand {
-  font-size: 1.25rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-stretch: 125%;
+  letter-spacing: -0.03em;
   color: var(--text);
   text-decoration: none;
+}
+
+// A relay contact: a square pad with its status light
+.brand__mark {
+  position: relative;
+  width: 1.05rem;
+  height: 1.05rem;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0.18rem;
+    border-radius: 50%;
+    background: var(--led-on);
+  }
 }
 
 .site-nav {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 0.25rem 1.25rem;
   flex-wrap: wrap;
 
   a {
     color: var(--text-muted);
+    font-weight: 550;
     text-decoration: none;
 
     &.active,
     &:hover {
       color: var(--text);
     }
+  }
+}
+
+.site-nav--user {
+  margin-left: auto;
+  font-size: 0.9375rem;
+}
+
+// Narrow screens: brand and account on the first row, the main navigation below
+@media (max-width: 47.99rem) {
+  .site-nav--user {
+    order: 1;
+  }
+
+  .site-nav:not(.site-nav--user) {
+    order: 2;
+    flex-basis: 100%;
   }
 }
 
@@ -53,10 +114,49 @@
   background: var(--accent);
   color: var(--on-accent);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 650;
   text-align: center;
 }
 
 main {
-  padding-block: 2rem 4rem;
+  flex: 1;
+  padding-block: 2.5rem 5rem;
+}
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.9375rem;
+}
+
+.site-footer__inner {
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  padding-block: 2.5rem 3rem;
+
+  h2 {
+    margin: 0 0 0.75rem;
+    font-size: 0.9375rem;
+  }
+
+  nav,
+  div {
+    display: grid;
+    align-content: start;
+    gap: 0.4rem;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  a {
+    color: var(--text-muted);
+    text-decoration: none;
+
+    &:hover {
+      color: var(--text);
+    }
+  }
 }

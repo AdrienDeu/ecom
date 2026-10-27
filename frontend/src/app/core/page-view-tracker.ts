@@ -13,9 +13,10 @@ export function pageType(url: string): PageType | null {
   if (path.startsWith('/auth/')) {
     return null; // technical redirect of the login flow
   }
-  if (path === '/' || path === '') return 'CATALOG';
-  if (path.startsWith('/products/')) return 'PRODUCT';
+  if (path === '/' || path === '') return 'HOME';
+  if (path === '/conseil' || path === '/materiel') return 'CATALOG';
   if (path === '/devis') return 'QUOTE';
+  if (path.startsWith('/products/')) return 'PRODUCT';
   if (path === '/cart') return 'CART';
   if (path === '/checkout') return 'CHECKOUT';
   if (path.startsWith('/account/orders/')) return 'ORDER';

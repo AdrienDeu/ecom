@@ -15,7 +15,7 @@ import { errorMessage } from '../../core/errors';
     }
     @if (store.cart(); as cart) {
       @if (cart.lines.length === 0) {
-        <p class="muted">Votre panier est vide. <a routerLink="/">Continuer mes achats</a></p>
+        <p class="muted">Votre panier est vide. Parcourez les <a routerLink="/conseil">forfaits de conseil</a> ou le <a routerLink="/materiel">matériel</a>.</p>
       } @else {
         <div class="card table-scroll">
           <table>
@@ -34,7 +34,7 @@ import { errorMessage } from '../../core/errors';
                   <td>
                     <a [routerLink]="['/products', line.slug]">{{ line.name }}</a>
                     @if (line.kind === 'SERVICE') {
-                      <div class="muted kind">Prestation, planifiée après la commande</div>
+                      <div class="muted kind">Prestation de conseil, planifiée après la commande</div>
                     }
                     @if (!line.available) {
                       <div class="field-error">Indisponible en quantité suffisante</div>
