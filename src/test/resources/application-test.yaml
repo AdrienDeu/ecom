@@ -3,6 +3,8 @@ ecom:
     # Jamais contacté : les tests injectent les jetons via SecurityMockMvcRequestPostProcessors.jwt()
     issuer-uri: http://localhost:1/test-issuer
     client-id: ecom-test
+  media:
+    local-directory: target/test-media
   notifications:
     # Les e-mails sont capturés par RecordingEmailSender
     quote-recipients: devis@example.test

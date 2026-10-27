@@ -15,27 +15,39 @@ import org.ecom.catalog.CatalogDtos.CreateProductRequest;
 import org.ecom.catalog.CatalogDtos.ProductView;
 import org.ecom.catalog.CatalogDtos.UpdateProductRequest;
 import org.ecom.inventory.InventoryService;
+import org.ecom.media.ImageFormat;
+import org.ecom.media.ImageStorage;
+import org.ecom.media.InvalidImageException;
 import org.ecom.shared.domain.Money;
 import org.ecom.shared.domain.Slugs;
 import org.ecom.shared.web.ResourceNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
 public class CatalogService {
 
+    private static final Logger log = LoggerFactory.getLogger(CatalogService.class);
+
     private final ProductRepository products;
     private final CategoryRepository categories;
     private final InventoryService inventory;
+    private final ImageStorage images;
 
-    CatalogService(ProductRepository products, CategoryRepository categories, InventoryService inventory) {
+    CatalogService(ProductRepository products, CategoryRepository categories, InventoryService inventory,
+                   ImageStorage images) {
         this.products = products;
         this.categories = categories;
         this.inventory = inventory;
+        this.images = images;
     }
 
     @Transactional(readOnly = true)
@@ -110,6 +122,29 @@ public class CatalogService {
         return AdminProductView.of(product, inventory.level(id));
     }
 
+    /**
+     * Replaces the product's image with an uploaded file. The previous image is deleted if it was uploaded too; an
+     * external URL entered by hand is left alone.
+     */
+    @Transactional
+    public AdminProductView uploadImage(UUID id, byte[] content) {
+        var product = product(id);
+        var format = ImageFormat.detect(content).orElseThrow(InvalidImageException::new);
+        // A new name for each upload: browsers and CloudFront may cache an image for good
+        var url = images.store("products/%s-%s.%s".formatted(id, UUID.randomUUID(), format.extension()), content, format);
+        var previous = product.getImageUrl();
+        product.update(product.getName(), product.getDescription(), product.getPrice(), url, product.getCategory(),
+                product.isActive());
+        // Only once the product points to the new image; a failed transaction leaves at worst an unused file
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deleteImage(previous);
+            }
+        });
+        return AdminProductView.of(product, inventory.level(id));
+    }
+
     @Transactional
     public void deactivateProduct(UUID id) {
         product(id).deactivate();
@@ -135,6 +170,14 @@ public class CatalogService {
     @Transactional(readOnly = true)
     public AdminProductView adminProduct(UUID id) {
         return AdminProductView.of(product(id), inventory.level(id));
+    }
+
+    private void deleteImage(String url) {
+        try {
+            images.delete(url);
+        } catch (RuntimeException e) {
+            log.warn("Could not delete replaced image {}", url, e);
+        }
     }
 
     private Product product(UUID id) {

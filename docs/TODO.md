@@ -92,7 +92,8 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Parcours complet validé dans Chromium headless (catalogue → panier invité → login → fusion → adresse → commande → back-office → mobile)
 - [ ] Tests E2E Playwright versionnés et exécutés en CD contre staging (étape 8)
 - [x] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
-- [ ] Images produits : upload vers S3 (aujourd'hui une URL saisie à la main)
+- [x] Images produits : envoi depuis l'ordinateur dans le back-office (JPEG, PNG, WebP, 5 Mo ; format vérifié sur le contenu), disque en local, bucket S3 servi par CloudFront sous `/media/*` en AWS
+- [ ] **Avant la mise en ligne** : autoriser l'envoi d'images dans le WAF (la règle gérée `SizeRestrictions_BODY` bloque les corps de plus de 8 Ko), de façon ciblée sur `POST /api/admin/products/*/image`
 
 ### 3c — Prestations et devis
 

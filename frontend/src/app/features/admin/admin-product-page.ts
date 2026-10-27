@@ -8,10 +8,15 @@ import { adminCatalogDeactivateProduct } from '../../api/fn/admin-catalog-contro
 import { adminCatalogProduct } from '../../api/fn/admin-catalog-controller/admin-catalog-product';
 import { adminCatalogUpdateProduct } from '../../api/fn/admin-catalog-controller/admin-catalog-update-product';
 import { adminCatalogUpdateStock } from '../../api/fn/admin-catalog-controller/admin-catalog-update-stock';
+import { adminCatalogUploadImage } from '../../api/fn/admin-catalog-controller/admin-catalog-upload-image';
 import { catalogCategories } from '../../api/fn/catalog-controller/catalog-categories';
 import { errorMessage } from '../../core/errors';
 import { ProductKind } from '../../core/labels';
 import { AdminNav } from './admin-nav';
+
+/** Same limits as the API (ImageFormat, spring.servlet.multipart.max-file-size), checked first for a clear message. */
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
 @Component({
   selector: 'app-admin-product-page',
@@ -65,10 +70,6 @@ import { AdminNav } from './admin-nav';
             }
           </select>
         </label>
-        <label>
-          URL de l'image
-          <input formControlName="imageUrl" type="url" />
-        </label>
         @if (isNew() && form.controls.kind.value === 'PRODUCT') {
           <label>
             Stock initial
@@ -80,6 +81,38 @@ import { AdminNav } from './admin-nav';
           </label>
         }
       </div>
+      <fieldset class="image-field">
+        <legend>Image</legend>
+        <div class="image-row">
+          <div class="preview">
+            @if (preview(); as src) {
+              <img [src]="src" alt="Aperçu de l'image du produit" />
+            } @else {
+              <span class="muted">Aucune image</span>
+            }
+          </div>
+          <div class="stack image-actions">
+            <div class="row">
+              <label class="btn secondary file">
+                Choisir une image
+                <input type="file" accept="image/jpeg,image/png,image/webp" (change)="pickImage($event)" />
+              </label>
+              @if (pickedFile() && !isNew()) {
+                <button type="button" class="btn" [disabled]="busy()" (click)="uploadImage()">Enregistrer l'image</button>
+              }
+            </div>
+            <p class="muted hint">
+              JPEG, PNG ou WebP, 5 Mo maximum.
+              @if (isNew()) { L'image est envoyée à l'enregistrement du produit. }
+              @if (pickedFile(); as file) { Choisie : {{ file.name }}. }
+            </p>
+            <label>
+              Ou adresse d'une image en ligne
+              <input formControlName="imageUrl" type="url" placeholder="https://…" />
+            </label>
+          </div>
+        </div>
+      </fieldset>
       <label>
         Description
         <textarea formControlName="description" rows="5"></textarea>
@@ -118,6 +151,26 @@ import { AdminNav } from './admin-nav';
     h2 { font-size: 1.25rem; }
     h3 { margin: 0; font-size: 1rem; }
     .checkbox { display: flex; align-items: center; gap: 0.5rem; align-self: end; }
+    .image-field { margin: 0; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius); }
+    .image-field legend { padding: 0 0.35rem; font-size: 0.875rem; font-weight: 550; }
+    .image-row { display: grid; gap: 1rem 1.5rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); align-items: start; }
+    .preview {
+      display: grid;
+      place-items: center;
+      aspect-ratio: 4 / 3;
+      max-width: 16rem;
+      overflow: hidden;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--bg);
+    }
+    .preview img { width: 100%; height: 100%; object-fit: cover; }
+    .image-actions { grid-column: span 2; }
+    .file { position: relative; }
+    /* The native input stays focusable and clickable, laid over its button */
+    .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .hint { margin: 0; font-size: 0.875rem; }
     .stock, .new-category { margin-top: 1.5rem; }
     .qty { width: 7rem; }
     .grow { flex: 1 1 14rem; }
@@ -135,6 +188,10 @@ export class AdminProductPage {
   protected readonly isNew = computed(() => !this.id());
 
   protected readonly busy = signal(false);
+  /** Image chosen on this computer, not uploaded yet, and its preview (a data: URL, allowed by the CSP). */
+  protected readonly pickedFile = signal<File | null>(null);
+  private readonly pickedPreview = signal<string | null>(null);
+  protected readonly preview = computed(() => this.pickedPreview() ?? this.product.value()?.imageUrl ?? null);
   protected readonly message = signal<{ text: string; error: boolean } | null>(null);
 
   protected readonly categories = resource({ loader: () => this.api.invoke(catalogCategories) });
@@ -205,9 +262,54 @@ export class AdminProductPage {
             initialStock: v.kind === 'PRODUCT' ? Number(v.initialStock) : undefined,
           },
         });
+        const file = this.pickedFile();
+        if (file) {
+          await this.api.invoke(adminCatalogUploadImage, { id: created.id, body: { file } });
+          this.clearPickedImage();
+        }
         await this.router.navigate(['/admin/products', created.id]);
       }
     });
+  }
+
+  protected pickImage(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) {
+      return;
+    }
+    if (!IMAGE_TYPES.includes(file.type)) {
+      this.message.set({ text: 'Choisissez une image JPEG, PNG ou WebP.', error: true });
+      return;
+    }
+    if (file.size > MAX_IMAGE_SIZE) {
+      this.message.set({ text: "L'image dépasse 5 Mo.", error: true });
+      return;
+    }
+    this.message.set(null);
+    this.pickedFile.set(file);
+    const reader = new FileReader();
+    reader.onload = () => this.pickedPreview.set(reader.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  protected uploadImage(): Promise<void> {
+    const file = this.pickedFile();
+    if (!file) {
+      return Promise.resolve();
+    }
+    return this.run('Image enregistrée.', async () => {
+      const updated = await this.api.invoke(adminCatalogUploadImage, { id: this.id()!, body: { file } });
+      this.product.set(updated);
+      this.form.controls.imageUrl.setValue(updated.imageUrl ?? '');
+      this.clearPickedImage();
+    });
+  }
+
+  private clearPickedImage(): void {
+    this.pickedFile.set(null);
+    this.pickedPreview.set(null);
   }
 
   protected deactivate(): Promise<void> {

@@ -1,5 +1,7 @@
 HELP.md
 target/
+# Images envoyées en local (ecom.media.local-directory)
+var/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
