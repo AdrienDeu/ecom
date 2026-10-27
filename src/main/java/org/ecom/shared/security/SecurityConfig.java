@@ -43,6 +43,8 @@ class SecurityConfig {
         return http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/catalog/**").permitAll()
+                        // Uploaded product images, served by the application in local development only
+                        .requestMatchers(HttpMethod.GET, "/media/**").permitAll()
                         // Guest carts: a token is optional, identified by the X-Cart-Id header otherwise
                         .requestMatchers("/api/cart/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/telemetry/**").permitAll()

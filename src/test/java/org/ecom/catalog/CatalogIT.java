@@ -1,9 +1,12 @@
 package org.ecom.catalog;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -11,8 +14,10 @@ import java.util.UUID;
 
 import org.ecom.ApiTestSupport;
 import org.ecom.IntegrationTest;
+import org.ecom.media.TestImages;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 
 @IntegrationTest
 class CatalogIT extends ApiTestSupport {
@@ -185,6 +190,45 @@ class CatalogIT extends ApiTestSupport {
                                 {"onHand": 5}"""))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("STOCK_NOT_TRACKED"));
+    }
+
+    @Test
+    void adminUploadsAProductImageThatIsServedUnderMedia() throws Exception {
+        var product = createProduct("49", 1);
+
+        var first = mvc.perform(multipart("/api/admin/products/{id}/image", product)
+                        .file(new MockMultipartFile("file", "photo.png", "image/png", TestImages.PNG)).with(admin()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.imageUrl").value(org.hamcrest.Matchers.matchesPattern("/media/products/" + product + "-[0-9a-f-]{36}\\.png")))
+                .andReturn();
+        String firstUrl = read(first, "$.imageUrl");
+        mvc.perform(get(firstUrl))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/png"))
+                .andExpect(content().bytes(TestImages.PNG));
+
+        // A new upload replaces the image and removes the previous file
+        var second = mvc.perform(multipart("/api/admin/products/{id}/image", product)
+                        .file(new MockMultipartFile("file", "autre.png", "image/png", TestImages.PNG)).with(admin()))
+                .andExpect(status().isOk())
+                .andReturn();
+        String secondUrl = read(second, "$.imageUrl");
+        assertThat(secondUrl).isNotEqualTo(firstUrl);
+        mvc.perform(get(firstUrl)).andExpect(status().isNotFound());
+        mvc.perform(get(secondUrl)).andExpect(status().isOk());
+    }
+
+    @Test
+    void onlyRealImagesAreAccepted() throws Exception {
+        var product = createProduct("49", 1);
+
+        mvc.perform(multipart("/api/admin/products/{id}/image", product)
+                        .file(new MockMultipartFile("file", "photo.png", "image/png", "<svg onload=alert(1)>".getBytes())).with(admin()))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_IMAGE"));
+        mvc.perform(multipart("/api/admin/products/{id}/image", product)
+                        .file(new MockMultipartFile("file", "photo.png", "image/png", TestImages.PNG)).with(customer("eve")))
+                .andExpect(status().isForbidden());
     }
 
 }

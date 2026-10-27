@@ -95,6 +95,12 @@ data "aws_iam_policy_document" "task" {
     resources = ["*"]
   }
 
+  statement {
+    sid       = "ProductImages"
+    actions   = ["s3:PutObject", "s3:DeleteObject"]
+    resources = ["${var.media_bucket_arn}/media/*"]
+  }
+
   dynamic "statement" {
     for_each = length(var.ses_identity_arns) > 0 ? [1] : []
 
