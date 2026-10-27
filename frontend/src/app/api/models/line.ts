@@ -3,6 +3,7 @@
 
 import { Money } from '../models/money';
 export interface Line {
+  kind: 'PRODUCT' | 'SERVICE';
   lineTotal: Money;
   name: string;
   productId: string;

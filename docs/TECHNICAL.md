@@ -317,6 +317,7 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 | `V2__customer_address.sql` | `address` |
 | `V3__orders.sql` | `customer_order` (statut, total, adresse figée, `expires_at`), `order_line` (snapshot sku/nom/prix) |
 | `V6__services_and_quotes.sql` | `product.kind` (`PRODUCT` / `SERVICE`), `stock.tracked`, `quote_request` |
+| `V7__order_line_kind.sql` | `order_line.kind` : type figé au checkout ; une commande sans produit à livrer expose `servicesOnly` (statuts affichés « Planifiée » / « Réalisée ») |
 
 ### 4.1 Stock et réservations
 
