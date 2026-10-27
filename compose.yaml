@@ -27,7 +27,7 @@ services:
   # Remplace Cognito en local : émet des jetons d'accès avec les mêmes claims (client_id, token_use, cognito:groups).
   # Issuer : http://localhost:9000/ecom — la page de login interactive permet de choisir le sub et les claims.
   oidc:
-    image: ghcr.io/navikt/mock-oauth2-server:3.0.1
+    image: ghcr.io/navikt/mock-oauth2-server:6.1.3
     ports:
       - "9000:8080"
     environment:
@@ -38,7 +38,7 @@ services:
       org.springframework.boot.ignore: "true"
 
   prometheus:
-    image: prom/prometheus:v3.7.3
+    image: prom/prometheus:v3.15.1
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-lifecycle
@@ -56,7 +56,7 @@ services:
 
   # Traces OTLP de l'application (http://localhost:4318/v1/traces), consultées dans Grafana
   tempo:
-    image: grafana/tempo:2.10.10
+    image: grafana/tempo:3.1.1
     command: ["-config.file=/etc/tempo/tempo.yml"]
     ports:
       - "4318:4318"
@@ -82,7 +82,7 @@ services:
       org.springframework.boot.ignore: "true"
 
   grafana:
-    image: grafana/grafana:12.2.1
+    image: grafana/grafana:13.2.4
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
