@@ -31,6 +31,8 @@ export type { AdminCatalogProducts$Params as AdminCatalogProducts$Params } from 
 export { adminCatalogProducts as adminCatalogProducts } from './fn/admin-catalog-controller/admin-catalog-products';
 export type { AdminCatalogCreateProduct$Params as AdminCatalogCreateProduct$Params } from './fn/admin-catalog-controller/admin-catalog-create-product';
 export { adminCatalogCreateProduct as adminCatalogCreateProduct } from './fn/admin-catalog-controller/admin-catalog-create-product';
+export type { AdminCatalogUploadImage$Params as AdminCatalogUploadImage$Params } from './fn/admin-catalog-controller/admin-catalog-upload-image';
+export { adminCatalogUploadImage as adminCatalogUploadImage } from './fn/admin-catalog-controller/admin-catalog-upload-image';
 export type { AdminCatalogCreateCategory$Params as AdminCatalogCreateCategory$Params } from './fn/admin-catalog-controller/admin-catalog-create-category';
 export { adminCatalogCreateCategory as adminCatalogCreateCategory } from './fn/admin-catalog-controller/admin-catalog-create-category';
 export type { TelemetryPageView$Params as TelemetryPageView$Params } from './fn/telemetry-controller/telemetry-page-view';

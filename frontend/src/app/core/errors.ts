@@ -20,6 +20,7 @@ const BUSINESS_MESSAGES: Record<string, string> = {
   INVALID_PAYMENT_STATE: "Cette opération n'est plus possible pour ce paiement.",
   REFUND_EXCEEDS_PAYMENT: 'Le montant dépasse ce qui reste à rembourser.',
   REFUND_REJECTED: 'Le remboursement a été refusé par le prestataire.',
+  UNSUPPORTED_IMAGE: 'Seules les images JPEG, PNG et WebP sont acceptées.',
 };
 
 export function errorMessage(error: unknown): string {
@@ -37,6 +38,8 @@ export function errorMessage(error: unknown): string {
       return 'Certaines informations sont invalides.';
     case 401:
       return 'Veuillez vous connecter.';
+    case 413:
+      return 'Le fichier est trop volumineux.';
     case 403:
       return "Vous n'avez pas les droits nécessaires.";
     case 404:

@@ -74,6 +74,11 @@ variable "secrets" {
   type        = map(string)
 }
 
+variable "media_bucket_arn" {
+  description = "Bucket des images produits : l'application y écrit et supprime sous media/."
+  type        = string
+}
+
 variable "ses_identity_arns" {
   description = "Identités SES depuis lesquelles l'application peut envoyer des e-mails (aucune : pas d'envoi)."
   type        = list(string)
