@@ -58,6 +58,7 @@ org.ecom
 ├── cart/
 ├── order/
 ├── customer/
+├── quote/             # demandes de devis (conseil sur mesure)
 ├── payment/
 │   ├── domain/        # Payment, PaymentAttempt, PaymentStatus
 │   ├── port/          # PaymentProvider (interface)
@@ -315,10 +316,12 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 | `V1__catalog_and_inventory.sql` | `category`, `product`, `stock` (`on_hand`, `reserved`, contrainte `reserved <= on_hand`) |
 | `V2__customer_address.sql` | `address` |
 | `V3__orders.sql` | `customer_order` (statut, total, adresse figée, `expires_at`), `order_line` (snapshot sku/nom/prix) |
+| `V6__services_and_quotes.sql` | `product.kind` (`PRODUCT` / `SERVICE`), `stock.tracked`, `quote_request` |
 
 ### 4.1 Stock et réservations
 
 - `available = on_hand - reserved`.
+- **Prestations de conseil** (`kind = SERVICE`) : stock non suivi (`tracked = false`), toujours disponible ; les mêmes requêtes de réservation, validation et libération s'y appliquent sans modifier les quantités, si bien que panier, checkout et annulation n'ont aucun cas particulier. Le stock d'une prestation ne se règle pas (`409 STOCK_NOT_TRACKED`).
 - **Checkout** : chaque ligne fait un `UPDATE stock SET reserved = reserved + q WHERE on_hand - reserved >= q` ; 0 ligne modifiée → `409 INSUFFICIENT_STOCK` et rollback de toute la commande. Le verrou de ligne PostgreSQL rend la survente impossible, sans verrou applicatif.
 - **Paiement** (`PAID`) : `on_hand -= q`, `reserved -= q`.
 - **Annulation / expiration** : `reserved -= q`. Le job `OrderExpiryJob` (chaque minute) annule les commandes non payées après `ecom.order.reservation-ttl` (30 min) ; `FOR UPDATE SKIP LOCKED` permet de le faire tourner sur plusieurs tâches ECS sans double traitement.
@@ -327,9 +330,9 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 
 | Méthode & chemin | Accès | Rôle |
 |---|---|---|
-| `GET /api/catalog/products?category=&q=&page=&size=&sort=` | public | Liste paginée des produits actifs |
+| `GET /api/catalog/products?kind=&category=&q=&page=&size=&sort=` | public | Liste paginée des produits actifs (`kind` : `PRODUCT` ou `SERVICE`) |
 | `GET /api/catalog/products/{slug}` | public | Fiche produit |
-| `GET /api/catalog/categories` | public | Catégories |
+| `GET /api/catalog/categories?kind=` | public | Catégories (avec `kind` : seulement celles qui ont des produits actifs de ce type) |
 | `GET\|POST /api/cart`, `/api/cart/items[/{productId}]` | public (`X-Cart-Id`) ou client | Panier |
 | `POST /api/cart/merge` | client | Fusion du panier invité (`X-Cart-Id`) |
 | `GET\|POST\|PUT\|DELETE /api/me/addresses[/{id}]` | client | Adresses |
@@ -337,6 +340,8 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 | `GET /api/orders[/{id}]`, `POST /api/orders/{id}/cancel` | client | Commandes du client |
 | `/api/admin/categories`, `/api/admin/products[/{id}[/stock]]` | `ADMIN` | Back-office catalogue et stock |
 | `GET /api/admin/orders?status=`, `POST /api/admin/orders/{id}/{ship\|deliver\|cancel}` | `ADMIN` | Back-office commandes |
+| `POST /api/quote-requests` | public | Demande de devis (champ piège `website` contre les robots, limite de débit WAF par IP) |
+| `GET /api/admin/quote-requests?status=`, `POST /api/admin/quote-requests/{id}/status` | `ADMIN` | Suivi des demandes de devis |
 
 Erreurs : `ProblemDetail` ; les erreurs métier (409) portent un champ `code` stable (`INSUFFICIENT_STOCK`, `EMPTY_CART`, `INVALID_STATUS_TRANSITION`, `QUANTITY_TOO_HIGH`…) que la SPA peut traduire. Les ressources d'un autre client renvoient 404 (et non 403) pour ne pas révéler leur existence.
 
@@ -510,6 +515,7 @@ logging:
 | `ecom_payment_webhooks_total`            | counter   | `provider`, `type`, `result` (`processed`, `duplicate`, `rejected`) | webhooks reçus |
 | `ecom_payment_refunds_total`             | counter   | `provider`                            | remboursements enregistrés |
 | `ecom_orders_placed_total`               | counter   | —                                     | checkout validé (après commit) |
+| `ecom_quote_requests_total`              | counter   | `outcome` (`received`, `spam`)        | demandes de devis (`spam` : champ piège rempli, rien n'est enregistré) |
 | `ecom_orders_expired_total`              | counter   | —                                     | commande non payée annulée à l'expiration de sa réservation : l'indicateur d'**abandon au paiement** (le panier lui-même n'est qu'une clé temporaire dans Valkey) |
 
 > Attention à la **cardinalité** des tags : jamais d'identifiant client/commande comme tag. Les raisons d'échec sont les codes du fournisseur (`INSTRUMENT_DECLINED`…) ; toute autre valeur devient `OTHER`. Les pages vues sont une liste fermée : une valeur inconnue est refusée (400).

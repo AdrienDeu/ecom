@@ -30,7 +30,11 @@ import { AdminNav } from './admin-nav';
                 <td><a [routerLink]="[p.id]">{{ p.sku }}</a></td>
                 <td>{{ p.name }}</td>
                 <td class="price">{{ p.price.amount | currency: p.price.currency }}</td>
-                <td [class.low]="p.stock.available === 0">{{ p.stock.available }} / {{ p.stock.onHand }}</td>
+                @if (p.stock.tracked) {
+                  <td [class.low]="p.stock.available === 0">{{ p.stock.available }} / {{ p.stock.onHand }}</td>
+                } @else {
+                  <td class="muted">Prestation, sans stock</td>
+                }
                 <td><span class="status">{{ p.active ? 'En vente' : 'Désactivé' }}</span></td>
               </tr>
             } @empty {

@@ -7,6 +7,8 @@ import jakarta.persistence.AttributeOverride;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
@@ -29,6 +31,9 @@ public class Product {
     private String slug;
 
     private String name;
+
+    @Enumerated(EnumType.STRING)
+    private ProductKind kind;
 
     private String description;
 
@@ -56,10 +61,11 @@ public class Product {
     protected Product() {
     }
 
-    public Product(String sku, String slug, String name, Money price) {
+    public Product(String sku, String slug, String name, ProductKind kind, Money price) {
         this.sku = sku;
         this.slug = slug;
         this.name = name;
+        this.kind = kind;
         this.price = price;
         this.active = true;
     }
@@ -91,6 +97,10 @@ public class Product {
 
     public String getName() {
         return name;
+    }
+
+    public ProductKind getKind() {
+        return kind;
     }
 
     public String getDescription() {

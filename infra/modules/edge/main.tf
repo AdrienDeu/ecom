@@ -40,6 +40,7 @@ locals {
   path_rate_limits = {
     payments  = { priority = 50, path = "/api/payments", limit = var.payment_rate_limit_per_ip }
     telemetry = { priority = 60, path = "/api/telemetry", limit = var.telemetry_rate_limit_per_ip }
+    quotes    = { priority = 70, path = "/api/quote-requests", limit = var.quote_rate_limit_per_ip }
   }
 }
 

@@ -94,6 +94,16 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Vérifier en CI que le client généré est à jour par rapport à l'OpenAPI
 - [ ] Images produits : upload vers S3 (aujourd'hui une URL saisie à la main)
 
+### 3c — Prestations et devis
+
+- [x] Type de produit `PRODUCT` / `SERVICE` : les prestations se commandent et se paient comme un produit, sans stock
+- [x] Demandes de devis (formulaire public anti-spam, suivi dans le back-office, limite de débit WAF)
+- [x] Identité de la boutique centralisée (`frontend/src/app/core/brand.ts`) ; une boutique par branche `shop/<nom>` (cf. README)
+- [ ] Prix HT/TTC : affichage configurable par boutique (clientèle professionnelle) et mentions de facturation
+- [ ] Notification e-mail à la réception d'une demande de devis (Amazon SES)
+- [ ] Commandes de prestations : statuts adaptés (planifiée, réalisée) au lieu d'« expédiée / livrée »
+- [ ] Déploiement d'une boutique : environnements et CD par branche `shop/*`
+
 ## Étape 4 — Paiement (PayPal, extensible)
 
 - [x] Définir l'abstraction `PaymentProvider` (port) + `PaymentProviderRegistry` — cf. doc technique §5
@@ -185,7 +195,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 ## Étape 9 — Sécurité & conformité
 
 - [ ] Aucune donnée carte stockée (PayPal gère la conformité **PCI-DSS**)
-- [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention
+- [ ] RGPD : consentement cookies, export/suppression des données client, durée de rétention (dont les demandes de devis)
 - [ ] Headers de sécurité (CSP — autoriser `www.paypal.com`, `*.paypal.com`, `*.paypalobjects.com` pour le SDK PayPal —, HSTS via CloudFront response headers policy), rate limiting AWS WAF sur login/paiement
 - [ ] Jetons stockés côté SPA en mémoire (pas de `localStorage`), refresh token rotatif
 - [ ] Revue OWASP Top 10, test de pénétration avant mise en prod

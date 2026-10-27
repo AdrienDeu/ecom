@@ -10,6 +10,7 @@ import { RequestBuilder } from '../../request-builder';
 import { PagedModelProductView } from '../../models/paged-model-product-view';
 
 export interface CatalogProducts$Params {
+  kind?: 'PRODUCT' | 'SERVICE';
   category?: string;
   q?: string;
 
@@ -32,6 +33,7 @@ export interface CatalogProducts$Params {
 export function catalogProducts(http: HttpClient, rootUrl: string, params?: CatalogProducts$Params, context?: HttpContext): Observable<StrictHttpResponse<PagedModelProductView>> {
   const rb = new RequestBuilder(rootUrl, catalogProducts.PATH, 'get');
   if (params) {
+    rb.query('kind', params.kind, {});
     rb.query('category', params.category, {});
     rb.query('q', params.q, {});
     rb.query('page', params.page, {});

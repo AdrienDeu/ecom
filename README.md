@@ -80,6 +80,25 @@ curl -s -X POST localhost:9000/ecom/token \
 - Commits et titres de PR au format [Conventional Commits](https://www.conventionalcommits.org/fr/).
 - Toute modification passe par une PR avec CI verte.
 
+## Boutiques (branches `shop/*`)
+
+`dev` et `main` portent la **plateforme** commune : catalogue, panier, commande, paiement, devis, back-office,
+observabilité, infrastructure. Chaque boutique concrète vit dans sa propre branche longue durée
+`shop/<nom>` (ex. `shop/relais-informatique`), qui n'ajoute que ce qui lui est propre :
+
+- identité : `frontend/src/app/core/brand.ts` (nom, accroche, contact) ;
+- design et pages : styles, page d'accueil, présentation du catalogue, textes ;
+- catalogue de démonstration local (`src/main/resources/db/demo/`, profil `local`).
+
+Règles :
+
+- Une évolution utile à toutes les boutiques (fonctionnalité, correctif, sécurité) se fait **dans `dev`**, jamais
+  dans une branche boutique.
+- La plateforme descend dans les boutiques par une PR `dev` → `shop/<nom>` fusionnée en *merge commit* (pas de
+  squash ni de rebase), pour garder l'historique commun et des fusions sans conflit.
+- Le travail propre à une boutique se fait dans `feat/<nom>-*` à partir de `shop/<nom>`, en PR vers cette branche.
+- Nouvelle boutique : créer `shop/<nom>` depuis `dev`, puis personnaliser les fichiers ci-dessus.
+
 ## Documentation
 
 - [Feuille de route](docs/TODO.md)

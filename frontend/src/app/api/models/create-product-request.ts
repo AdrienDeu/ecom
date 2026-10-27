@@ -5,7 +5,8 @@ export interface CreateProductRequest {
   categoryId?: string;
   description?: string;
   imageUrl?: string;
-  initialStock?: number;
+  initialStock?: number | null;
+  kind?: ('PRODUCT' | 'SERVICE') | null;
   name: string;
   price: number;
   sku: string;

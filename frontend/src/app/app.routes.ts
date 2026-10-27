@@ -8,6 +8,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/catalog/catalog-page').then((m) => m.CatalogPage),
   },
   {
+    path: 'devis',
+    title: 'Demander un devis',
+    loadComponent: () => import('./features/quote/quote-page').then((m) => m.QuotePage),
+  },
+  {
     path: 'products/:slug',
     loadComponent: () => import('./features/catalog/product-page').then((m) => m.ProductPage),
   },
@@ -68,6 +73,11 @@ export const routes: Routes = [
         path: 'orders',
         title: 'Back-office · Commandes',
         loadComponent: () => import('./features/admin/admin-orders-page').then((m) => m.AdminOrdersPage),
+      },
+      {
+        path: 'quotes',
+        title: 'Back-office · Devis',
+        loadComponent: () => import('./features/admin/admin-quotes-page').then((m) => m.AdminQuotesPage),
       },
     ],
   },

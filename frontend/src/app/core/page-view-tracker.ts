@@ -15,6 +15,7 @@ export function pageType(url: string): PageType | null {
   }
   if (path === '/' || path === '') return 'CATALOG';
   if (path.startsWith('/products/')) return 'PRODUCT';
+  if (path === '/devis') return 'QUOTE';
   if (path === '/cart') return 'CART';
   if (path === '/checkout') return 'CHECKOUT';
   if (path.startsWith('/account/orders/')) return 'ORDER';

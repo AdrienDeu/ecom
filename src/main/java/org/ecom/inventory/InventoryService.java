@@ -22,12 +22,21 @@ public class InventoryService {
 
     @Transactional
     public void initialize(UUID productId, int onHand) {
-        stocks.save(new Stock(productId, onHand));
+        stocks.save(new Stock(productId, onHand, true));
+    }
+
+    /** Stock of a product sold without quantity limit (a service). */
+    @Transactional
+    public void initializeUntracked(UUID productId) {
+        stocks.save(new Stock(productId, 0, false));
     }
 
     @Transactional
     public StockLevel setOnHand(UUID productId, int onHand) {
         var stock = stocks.findById(productId).orElseThrow(() -> new ResourceNotFoundException("Stock", productId));
+        if (!stock.isTracked()) {
+            throw new BusinessException("STOCK_NOT_TRACKED", "This product has no stock to manage");
+        }
         if (onHand < stock.getReserved()) {
             throw new BusinessException("STOCK_BELOW_RESERVED",
                     "On-hand quantity cannot be lower than the %d reserved units".formatted(stock.getReserved()));
@@ -83,10 +92,12 @@ public class InventoryService {
         }
     }
 
-    public record StockLevel(UUID productId, int onHand, int reserved, int available) {
+    /** For untracked stock, {@code available} is {@link Integer#MAX_VALUE}. */
+    public record StockLevel(UUID productId, boolean tracked, int onHand, int reserved, int available) {
 
         static StockLevel of(Stock stock) {
-            return new StockLevel(stock.getProductId(), stock.getOnHand(), stock.getReserved(), stock.available());
+            return new StockLevel(stock.getProductId(), stock.isTracked(), stock.getOnHand(), stock.getReserved(),
+                    stock.available());
         }
 
     }
