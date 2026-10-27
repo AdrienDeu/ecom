@@ -100,7 +100,8 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Demandes de devis (formulaire public anti-spam, suivi dans le back-office, limite de débit WAF)
 - [x] Identité de la boutique centralisée (`frontend/src/app/core/brand.ts`) ; une boutique par branche `shop/<nom>` (cf. README)
 - [ ] Prix HT/TTC : affichage configurable par boutique (clientèle professionnelle) et mentions de facturation
-- [ ] Notification e-mail à la réception d'une demande de devis (Amazon SES)
+- [x] Notification e-mail à la réception d'une demande de devis (Mailpit en local, API Amazon SES en AWS ; réponse directe au demandeur)
+- [ ] Sortir le compte SES du sandbox avant la mise en production (cf. infra/README.md)
 - [x] Commandes de prestations : « Planifiée » / « Réalisée » au lieu d'« Expédiée » / « Livrée » (type figé sur chaque ligne de commande)
 - [ ] Déploiement d'une boutique : environnements et CD par branche `shop/*`
 
