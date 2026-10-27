@@ -3,6 +3,9 @@ ecom:
     # Jamais contacté : les tests injectent les jetons via SecurityMockMvcRequestPostProcessors.jwt()
     issuer-uri: http://localhost:1/test-issuer
     client-id: ecom-test
+  notifications:
+    # Les e-mails sont capturés par RecordingEmailSender
+    quote-recipients: devis@example.test
   order:
     expiry-job:
       enabled: false

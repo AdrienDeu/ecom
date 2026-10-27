@@ -74,6 +74,12 @@ variable "secrets" {
   type        = map(string)
 }
 
+variable "ses_identity_arns" {
+  description = "Identités SES depuis lesquelles l'application peut envoyer des e-mails (aucune : pas d'envoi)."
+  type        = list(string)
+  default     = []
+}
+
 variable "secret_arns" {
   description = "Secrets lisibles par le rôle d'exécution (ARN sans suffixe de clé)."
   type        = list(string)

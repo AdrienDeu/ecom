@@ -96,6 +96,16 @@ data "aws_iam_policy_document" "task" {
   }
 
   dynamic "statement" {
+    for_each = length(var.ses_identity_arns) > 0 ? [1] : []
+
+    content {
+      sid       = "SesNotifications"
+      actions   = ["ses:SendEmail"]
+      resources = var.ses_identity_arns
+    }
+  }
+
+  dynamic "statement" {
     for_each = var.enable_execute_command ? [1] : []
 
     content {

@@ -3,6 +3,10 @@ spring:
   docker:
     compose:
       lifecycle-management: start-only
+  mail:
+    # Mailpit (compose.yaml), interface sur http://localhost:8025
+    host: localhost
+    port: 1025
 
 ecom:
   cors:
@@ -12,6 +16,10 @@ ecom:
     # Serveur OIDC de test (compose.yaml) qui émet des jetons au format Cognito
     issuer-uri: http://localhost:9000/ecom
     client-id: ecom-local
+  notifications:
+    transport: smtp
+    from: no-reply@ecom.localhost
+    quote-recipients: devis@ecom.localhost
 
 management:
   tracing:

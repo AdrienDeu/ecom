@@ -53,6 +53,7 @@ npm test && npm run lint
 | http://localhost:9090                   | Prometheus                       |
 | http://localhost:3000                   | Grafana : dashboards `ecom — API` et `ecom — Métier`, traces (Tempo) et logs (Loki) dans Explore (`GRAFANA_PORT` pour changer le port) |
 | http://localhost:9000/ecom              | Serveur OIDC de test (remplace Cognito en local) |
+| http://localhost:8025                   | Mailpit : e-mails envoyés par l'application (notifications de devis), rien ne part réellement |
 
 Se connecter dans la SPA en local : la page de login du serveur OIDC de test demande un nom d'utilisateur et des claims. Pour un compte admin, saisir par exemple :
 

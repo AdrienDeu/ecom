@@ -59,6 +59,7 @@ org.ecom
 ├── order/
 ├── customer/
 ├── quote/             # demandes de devis (conseil sur mesure)
+├── notification/      # e-mails à l'équipe : SMTP (Mailpit) en local, API SES en AWS
 ├── payment/
 │   ├── domain/        # Payment, PaymentAttempt, PaymentStatus
 │   ├── port/          # PaymentProvider (interface)
@@ -517,6 +518,7 @@ logging:
 | `ecom_payment_refunds_total`             | counter   | `provider`                            | remboursements enregistrés |
 | `ecom_orders_placed_total`               | counter   | —                                     | checkout validé (après commit) |
 | `ecom_quote_requests_total`              | counter   | `outcome` (`received`, `spam`)        | demandes de devis (`spam` : champ piège rempli, rien n'est enregistré) |
+| `ecom_notifications_total`               | counter   | `type` (`quote_request`), `outcome` (`sent`, `failed`) | e-mails à l'équipe, envoyés après la transaction sur un autre thread : un échec n'affecte jamais la requête |
 | `ecom_orders_expired_total`              | counter   | —                                     | commande non payée annulée à l'expiration de sa réservation : l'indicateur d'**abandon au paiement** (le panier lui-même n'est qu'une clé temporaire dans Valkey) |
 
 > Attention à la **cardinalité** des tags : jamais d'identifiant client/commande comme tag. Les raisons d'échec sont les codes du fournisseur (`INSTRUMENT_DECLINED`…) ; toute autre valeur devient `OTHER`. Les pages vues sont une liste fermée : une valeur inconnue est refusée (400).

@@ -206,17 +206,20 @@ locals {
   paypal_secret = module.secrets.paypal_secret_arn
 
   app_environment = {
-    SPRING_PROFILES_ACTIVE          = var.spring_profile
-    ECOM_ENVIRONMENT                = var.environment
-    SPRING_DATASOURCE_URL           = module.database.jdbc_url
-    SPRING_DATA_REDIS_HOST          = module.cache.primary_endpoint
-    SPRING_DATA_REDIS_PORT          = tostring(module.cache.port)
-    SPRING_DATA_REDIS_SSL_ENABLED   = "true"
-    ECOM_SECURITY_ISSUER_URI        = module.identity.issuer_uri
-    ECOM_SECURITY_CLIENT_ID         = module.identity.spa_client_id
-    PAYPAL_ENABLED                  = tostring(var.paypal_enabled)
-    PAYPAL_BASE_URL                 = var.paypal_base_url
-    SERVER_FORWARD_HEADERS_STRATEGY = "native"
+    SPRING_PROFILES_ACTIVE              = var.spring_profile
+    ECOM_ENVIRONMENT                    = var.environment
+    SPRING_DATASOURCE_URL               = module.database.jdbc_url
+    SPRING_DATA_REDIS_HOST              = module.cache.primary_endpoint
+    SPRING_DATA_REDIS_PORT              = tostring(module.cache.port)
+    SPRING_DATA_REDIS_SSL_ENABLED       = "true"
+    ECOM_SECURITY_ISSUER_URI            = module.identity.issuer_uri
+    ECOM_SECURITY_CLIENT_ID             = module.identity.spa_client_id
+    PAYPAL_ENABLED                      = tostring(var.paypal_enabled)
+    PAYPAL_BASE_URL                     = var.paypal_base_url
+    SERVER_FORWARD_HEADERS_STRATEGY     = "native"
+    ECOM_NOTIFICATIONS_TRANSPORT        = "ses"
+    ECOM_NOTIFICATIONS_FROM             = module.email.from_address
+    ECOM_NOTIFICATIONS_QUOTE_RECIPIENTS = join(",", var.quote_notification_emails)
   }
 
   app_secrets = merge(
@@ -252,6 +255,7 @@ module "backend" {
   environment                 = local.app_environment
   secrets                     = local.app_secrets
   secret_arns                 = [module.database.master_user_secret_arn, module.cache.auth_token_secret_arn, local.paypal_secret]
+  ses_identity_arns           = module.email.identity_arns
   kms_key_arn                 = aws_kms_key.this.arn
   prometheus_remote_write_url = module.observability.prometheus_remote_write_url
   prometheus_workspace_arn    = module.observability.prometheus_workspace_arn
@@ -260,6 +264,16 @@ module "backend" {
 }
 
 # --- Bordure (us-east-1) et SPA ---
+
+# --- E-mails de notification (SES) ---
+
+module "email" {
+  source = "../email"
+
+  domain_name      = var.domain_name
+  zone_id          = data.aws_route53_zone.this.zone_id
+  recipient_emails = var.quote_notification_emails
+}
 
 module "edge" {
   source = "../edge"

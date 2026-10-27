@@ -37,6 +37,16 @@ services:
     labels:
       org.springframework.boot.ignore: "true"
 
+  # Faux serveur SMTP : les e-mails envoyés par l'application (notifications de devis) sont consultables sur
+  # http://localhost:8025, rien ne part réellement
+  mailpit:
+    image: axllent/mailpit:v1.31.5
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    labels:
+      org.springframework.boot.ignore: "true"
+
   prometheus:
     image: prom/prometheus:v3.15.1
     command:

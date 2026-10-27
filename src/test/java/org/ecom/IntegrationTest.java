@@ -18,6 +18,6 @@ import org.springframework.test.context.ActiveProfiles;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import({TestcontainersConfiguration.class, PaypalStubConfiguration.class})
+@Import({TestcontainersConfiguration.class, PaypalStubConfiguration.class, RecordingEmailSender.class})
 public @interface IntegrationTest {
 }
