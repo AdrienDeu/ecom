@@ -21,6 +21,7 @@ storage:
     local:
       path: /var/tempo/blocks
 
-compactor:
+# Tempo 3 : le compactor est remplacé par backend-scheduler / backend-worker, qui portent la rétention
+backend_worker:
   compaction:
     block_retention: 24h
