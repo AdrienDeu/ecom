@@ -14,6 +14,11 @@ export interface OrderView {
   id: string;
   lines: Array<Line>;
   reference: string;
+
+  /**
+   * Nothing to ship: SHIPPED means the service is scheduled, DELIVERED that it was performed
+   */
+  servicesOnly: boolean;
   shippingAddress: PostalAddress;
   status: 'CREATED' | 'PAYMENT_PENDING' | 'PAID' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';
   total: Money;

@@ -16,6 +16,7 @@ import java.util.concurrent.Executors;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.ecom.ApiTestSupport;
 import org.ecom.IntegrationTest;
+import org.ecom.catalog.ProductKind;
 import org.ecom.inventory.InventoryService;
 import org.ecom.shared.web.BusinessException;
 import org.junit.jupiter.api.Test;
@@ -53,6 +54,8 @@ class OrderIT extends ApiTestSupport {
                 .andExpect(jsonPath("$.total.amount").value(39.98))
                 .andExpect(jsonPath("$.shippingAddress.city").value("Paris"))
                 .andExpect(jsonPath("$.lines[0].unitPrice.amount").value(19.99))
+                .andExpect(jsonPath("$.lines[0].kind").value("PRODUCT"))
+                .andExpect(jsonPath("$.servicesOnly").value(false))
                 .andExpect(jsonPath("$.expiresAt").isNotEmpty())
                 .andReturn();
         String orderId = read(result, "$.id");
@@ -245,6 +248,8 @@ class OrderIT extends ApiTestSupport {
         orders.markPaid(order);
 
         assertThat(orders.get(order).status()).isEqualTo(OrderStatus.PAID);
+        assertThat(orders.get(order).servicesOnly()).isTrue();
+        assertThat(orders.get(order).lines().getFirst().kind()).isEqualTo(ProductKind.SERVICE);
         assertThat(inventory.level(service).reserved()).isZero();
         var customer = unique("mia");
         var cancelled = placeOrder(customer, service, 2);
