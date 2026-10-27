@@ -5,7 +5,7 @@ import { Api } from '../../api/api';
 import { orderCancel } from '../../api/fn/order-controller/order-cancel';
 import { orderMyOrder } from '../../api/fn/order-controller/order-my-order';
 import { errorMessage } from '../../core/errors';
-import { isCancellable, orderStatusLabel } from '../../core/labels';
+import { isCancellable, orderStatusLabel, orderStatusTone } from '../../core/labels';
 import { PaymentPanel } from './payment-panel';
 
 @Component({
@@ -24,7 +24,7 @@ import { PaymentPanel } from './payment-panel';
     } @else if (order.value(); as o) {
       <div class="row spread">
         <h1>Commande {{ o.reference }}</h1>
-        <span class="status">{{ statusLabel(o) }}</span>
+        <span class="status" [attr.data-tone]="statusTone(o.status)">{{ statusLabel(o) }}</span>
       </div>
       <p class="muted">Passée le {{ o.createdAt | date: 'long' }}</p>
       @if (o.expiresAt) {
@@ -95,6 +95,7 @@ export class OrderPage {
   readonly created = input(false, { transform: (value: unknown) => value === '1' || value === true });
 
   protected readonly statusLabel = orderStatusLabel;
+  protected readonly statusTone = orderStatusTone;
   protected readonly cancellable = isCancellable;
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);

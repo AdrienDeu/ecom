@@ -2,7 +2,7 @@
 @import '@fontsource-variable/archivo/wdth.css';
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   // Cool "drawing paper" and ink; the accent is the green of a circuit board, amber is reserved for status lights
   --bg: #f3f5f4;
@@ -33,24 +33,25 @@
   font-variant-numeric: lining-nums;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0f1715;
-    --surface: #16211e;
-    --border: #2a3833;
-    --text: #e6ece9;
-    --text-muted: #9aaba5;
-    --accent: #4fb894;
-    --accent-hover: #6fcaa9;
-    --accent-soft: #1b322b;
-    --on-accent: #0b1a15;
-    --led-on: #3fd197;
-    --led-low: #e7b73a;
-    --led-off: #3a4a44;
-    --danger: #f2a39d;
-    --success: #8fd6a8;
-    --warning: #f0c36a;
-  }
+// Dark colours: set by ThemeStore (or public/theme-init.js) from the visitor's choice or the system preference
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0f1715;
+  --surface: #16211e;
+  --border: #2a3833;
+  --text: #e6ece9;
+  --text-muted: #9aaba5;
+  --accent: #4fb894;
+  --accent-hover: #6fcaa9;
+  --accent-soft: #1b322b;
+  --on-accent: #0b1a15;
+  --led-on: #3fd197;
+  --led-low: #e7b73a;
+  --led-off: #3a4a44;
+  --danger: #f2a39d;
+  --success: #8fd6a8;
+  --warning: #f0c36a;
 }
 
 *,
@@ -277,6 +278,27 @@ input[type='radio'] {
   border: 1px solid var(--border);
   font-size: 0.8125rem;
   white-space: nowrap;
+}
+
+// Tone of a status pill (orderStatusTone, quoteStatusTone): waiting on someone, under way, done, or closed
+.status[data-tone='pending'] {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  color: var(--warning);
+}
+
+.status[data-tone='active'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.status[data-tone='done'] {
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+.status[data-tone='closed'] {
+  color: var(--text-muted);
 }
 
 table {

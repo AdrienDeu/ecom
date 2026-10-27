@@ -1,4 +1,11 @@
-import { isCancellable, ORDER_STATUS_LABELS, ORDER_STATUSES, orderStatusFilterLabel, orderStatusLabel } from './labels';
+import {
+  isCancellable,
+  ORDER_STATUS_LABELS,
+  ORDER_STATUSES,
+  orderStatusFilterLabel,
+  orderStatusLabel,
+  orderStatusTone,
+} from './labels';
 
 describe('order labels', () => {
   it('has a label for every status', () => {
@@ -13,6 +20,10 @@ describe('order labels', () => {
     expect(orderStatusLabel({ status: 'PAID', servicesOnly: true })).toBe('Payée');
     expect(orderStatusFilterLabel('SHIPPED')).toBe('Expédiée / planifiée');
     expect(orderStatusFilterLabel('PAID')).toBe('Payée');
+  });
+
+  it('gives every status a tone', () => {
+    expect(ORDER_STATUSES.map(orderStatusTone)).toEqual(['pending', 'pending', 'active', 'active', 'done', 'closed', 'closed']);
   });
 
   it('only lets unpaid orders be cancelled', () => {

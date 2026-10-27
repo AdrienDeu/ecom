@@ -35,7 +35,7 @@ import { AdminNav } from './admin-nav';
                 } @else {
                   <td class="muted">Prestation, sans stock</td>
                 }
-                <td><span class="status">{{ p.active ? 'En vente' : 'Désactivé' }}</span></td>
+                <td><span class="status" [attr.data-tone]="p.active ? 'done' : 'closed'">{{ p.active ? 'En vente' : 'Désactivé' }}</span></td>
               </tr>
             } @empty {
               <tr><td colspan="5" class="muted">Aucun produit.</td></tr>
