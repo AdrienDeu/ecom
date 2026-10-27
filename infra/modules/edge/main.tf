@@ -37,6 +37,15 @@ locals {
     AWSManagedRulesKnownBadInputsRuleSet  = 30
   }
 
+  # Règles gérées seulement comptées : elles étiquettent la requête, une règle à nous décide (cf. body-size-limit)
+  managed_rule_counted = {
+    AWSManagedRulesCommonRuleSet = ["SizeRestrictions_BODY"]
+  }
+
+  # Seul chemin autorisé à dépasser 8 Ko de corps : l'envoi d'une image produit (back-office, admin authentifié,
+  # 5 Mo au plus vérifiés par l'application)
+  image_upload_path_regex = "^/api/admin/products/[0-9a-fA-F-]{36}/image$"
+
   path_rate_limits = {
     payments  = { priority = 50, path = "/api/payments", limit = var.payment_rate_limit_per_ip }
     telemetry = { priority = 60, path = "/api/telemetry", limit = var.telemetry_rate_limit_per_ip }
@@ -68,6 +77,18 @@ resource "aws_wafv2_web_acl" "this" {
         managed_rule_group_statement {
           vendor_name = "AWS"
           name        = rule.key
+
+          dynamic "rule_action_override" {
+            for_each = lookup(local.managed_rule_counted, rule.key, [])
+
+            content {
+              name = rule_action_override.value
+
+              action_to_use {
+                count {}
+              }
+            }
+          }
         }
       }
 
@@ -76,6 +97,73 @@ resource "aws_wafv2_web_acl" "this" {
         metric_name                = rule.key
         sampled_requests_enabled   = true
       }
+    }
+  }
+
+  # Remplace SizeRestrictions_BODY (comptée ci-dessus) : bloque les corps de plus de 8 Ko partout, sauf l'envoi d'images
+  # produits. Évaluée après AWSManagedRulesCommonRuleSet (20), dont elle lit l'étiquette.
+  rule {
+    name     = "body-size-limit"
+    priority = 25
+
+    action {
+      block {}
+    }
+
+    statement {
+      and_statement {
+        statement {
+          label_match_statement {
+            scope = "LABEL"
+            key   = "awswaf:managed:aws:core-rule-set:SizeRestrictions_Body"
+          }
+        }
+
+        statement {
+          not_statement {
+            statement {
+              and_statement {
+                statement {
+                  byte_match_statement {
+                    search_string         = "POST"
+                    positional_constraint = "EXACTLY"
+
+                    field_to_match {
+                      method {}
+                    }
+
+                    text_transformation {
+                      priority = 0
+                      type     = "NONE"
+                    }
+                  }
+                }
+
+                statement {
+                  regex_match_statement {
+                    regex_string = local.image_upload_path_regex
+
+                    field_to_match {
+                      uri_path {}
+                    }
+
+                    text_transformation {
+                      priority = 0
+                      type     = "NONE"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "body-size-limit"
+      sampled_requests_enabled   = true
     }
   }
 

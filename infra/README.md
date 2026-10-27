@@ -123,10 +123,9 @@ Puis `paypal_enabled = true` dans `terraform.tfvars` (PR → plan → CD). Sans 
 Le module `frontend` crée le bucket `…-media-…` (privé, SSE-S3, versions gardées 30 jours) que CloudFront sert sous
 `/media/*` ; l'application y écrit sous `media/` avec le rôle de la tâche ECS (`s3:PutObject`, `s3:DeleteObject`).
 
-**À régler avant la mise en ligne** : la règle gérée `SizeRestrictions_BODY` du WAF (groupe
-`AWSManagedRulesCommonRuleSet`) bloque les corps de requête de plus de 8 Ko, donc l'envoi d'images depuis le
-back-office. Il faut une exception limitée à `POST /api/admin/products/*/image` (la taille y est limitée à 5 Mo par
-l'application).
+WAF : la règle gérée `SizeRestrictions_BODY` (corps de plus de 8 Ko) est seulement comptée et remplacée par la règle
+`body-size-limit`, qui bloque ces requêtes partout sauf `POST /api/admin/products/{id}/image` (réservé aux admins, 5 Mo
+au plus vérifiés par l'application). Requêtes bloquées visibles dans la métrique CloudWatch `body-size-limit`.
 
 ### Notifications par e-mail (SES)
 
