@@ -8,6 +8,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
     <nav class="row tabs" aria-label="Back-office">
       <a routerLink="/admin/products" routerLinkActive="active">Produits</a>
       <a routerLink="/admin/orders" routerLinkActive="active">Commandes</a>
+      <a routerLink="/admin/quotes" routerLinkActive="active">Devis</a>
     </nav>
   `,
   styles: `

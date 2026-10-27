@@ -2,6 +2,7 @@ import { Component, inject, OnInit } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/auth.service';
 import { RuntimeConfigStore } from './core/auth-config';
+import { BRAND } from './core/brand';
 import { CartStore } from './core/cart.store';
 
 @Component({
@@ -10,9 +11,10 @@ import { CartStore } from './core/cart.store';
   template: `
     <header class="site-header">
       <div class="container site-header__inner">
-        <a routerLink="/" class="brand">ecom</a>
+        <a routerLink="/" class="brand">{{ brand.name }}</a>
         <nav class="site-nav" aria-label="Navigation principale">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Catalogue</a>
+          <a routerLink="/devis" routerLinkActive="active">Demander un devis</a>
           @if (auth.isAuthenticated()) {
             <a routerLink="/account" routerLinkActive="active">{{ auth.displayName() }}</a>
             @if (auth.isAdmin()) {
@@ -40,6 +42,7 @@ import { CartStore } from './core/cart.store';
 export class App implements OnInit {
   protected readonly auth = inject(AuthService);
   protected readonly cart = inject(CartStore);
+  protected readonly brand = BRAND;
   private readonly runtimeConfig = inject(RuntimeConfigStore);
 
   ngOnInit(): void {

@@ -30,26 +30,27 @@ public final class CatalogDtos {
 
     }
 
-    public record ProductView(UUID id, String sku, String slug, String name, @Schema(nullable = true) String description,
-                              Money price, @Schema(nullable = true) String imageUrl,
-                              @Schema(nullable = true) CategoryView category, boolean inStock) {
+    public record ProductView(UUID id, String sku, String slug, String name, ProductKind kind,
+                              @Schema(nullable = true) String description, Money price,
+                              @Schema(nullable = true) String imageUrl, @Schema(nullable = true) CategoryView category,
+                              boolean inStock) {
 
         static ProductView of(Product product, int available) {
             return new ProductView(product.getId(), product.getSku(), product.getSlug(), product.getName(),
-                    product.getDescription(), product.getPrice(), product.getImageUrl(),
+                    product.getKind(), product.getDescription(), product.getPrice(), product.getImageUrl(),
                     CategoryView.of(product.getCategory()), available > 0);
         }
 
     }
 
-    public record AdminProductView(UUID id, String sku, String slug, String name,
+    public record AdminProductView(UUID id, String sku, String slug, String name, ProductKind kind,
                                    @Schema(nullable = true) String description, Money price,
                                    @Schema(nullable = true) String imageUrl, @Schema(nullable = true) CategoryView category,
                                    boolean active, StockLevel stock) {
 
         static AdminProductView of(Product product, StockLevel stock) {
             return new AdminProductView(product.getId(), product.getSku(), product.getSlug(), product.getName(),
-                    product.getDescription(), product.getPrice(), product.getImageUrl(),
+                    product.getKind(), product.getDescription(), product.getPrice(), product.getImageUrl(),
                     CategoryView.of(product.getCategory()), product.isActive(), stock);
         }
 
@@ -59,14 +60,19 @@ public final class CatalogDtos {
                                         @Size(max = 100) @Pattern(regexp = SLUG) String slug) {
     }
 
+    /**
+     * {@code kind} defaults to {@link ProductKind#PRODUCT} and {@code initialStock} to 0; a service ignores
+     * {@code initialStock}.
+     */
     public record CreateProductRequest(@NotBlank @Size(max = 64) String sku,
                                        @NotBlank @Size(max = 200) String name,
+                                       @Schema(nullable = true) ProductKind kind,
                                        @Size(max = 200) @Pattern(regexp = SLUG) String slug,
                                        @Size(max = 10_000) String description,
                                        @NotNull @DecimalMin("0.00") @Digits(integer = 15, fraction = 2) BigDecimal price,
                                        @Size(max = 1000) String imageUrl,
                                        UUID categoryId,
-                                       @Min(0) int initialStock) {
+                                       @Schema(nullable = true) @Min(0) Integer initialStock) {
     }
 
     public record UpdateProductRequest(@NotBlank @Size(max = 200) String name,

@@ -11,6 +11,7 @@ const line = {
   sku: 'SKU-1',
   slug: 'shirt',
   name: 'Shirt',
+  kind: 'PRODUCT' as const,
   imageUrl: null,
   unitPrice: { amount: 10, currency: 'EUR' },
   quantity: 2,

@@ -35,6 +35,8 @@ export type { AdminCatalogCreateCategory$Params as AdminCatalogCreateCategory$Pa
 export { adminCatalogCreateCategory as adminCatalogCreateCategory } from './fn/admin-catalog-controller/admin-catalog-create-category';
 export type { TelemetryPageView$Params as TelemetryPageView$Params } from './fn/telemetry-controller/telemetry-page-view';
 export { telemetryPageView as telemetryPageView } from './fn/telemetry-controller/telemetry-page-view';
+export type { QuoteSubmit$Params as QuoteSubmit$Params } from './fn/quote-controller/quote-submit';
+export { quoteSubmit as quoteSubmit } from './fn/quote-controller/quote-submit';
 export type { PaymentStart$Params as PaymentStart$Params } from './fn/payment-controller/payment-start';
 export { paymentStart as paymentStart } from './fn/payment-controller/payment-start';
 export type { PaymentCapture$Params as PaymentCapture$Params } from './fn/payment-controller/payment-capture';
@@ -49,6 +51,10 @@ export type { OrderCancel$Params as OrderCancel$Params } from './fn/order-contro
 export { orderCancel as orderCancel } from './fn/order-controller/order-cancel';
 export type { OrderMyOrder$Params as OrderMyOrder$Params } from './fn/order-controller/order-my-order';
 export { orderMyOrder as orderMyOrder } from './fn/order-controller/order-my-order';
+export type { AdminQuoteChangeStatus$Params as AdminQuoteChangeStatus$Params } from './fn/admin-quote-controller/admin-quote-change-status';
+export { adminQuoteChangeStatus as adminQuoteChangeStatus } from './fn/admin-quote-controller/admin-quote-change-status';
+export type { AdminQuoteList$Params as AdminQuoteList$Params } from './fn/admin-quote-controller/admin-quote-list';
+export { adminQuoteList as adminQuoteList } from './fn/admin-quote-controller/admin-quote-list';
 export type { AdminPaymentRefund$Params as AdminPaymentRefund$Params } from './fn/admin-payment-controller/admin-payment-refund';
 export { adminPaymentRefund as adminPaymentRefund } from './fn/admin-payment-controller/admin-payment-refund';
 export type { AdminPaymentList$Params as AdminPaymentList$Params } from './fn/admin-payment-controller/admin-payment-list';

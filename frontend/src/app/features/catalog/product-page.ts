@@ -4,6 +4,7 @@ import { Title } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { Api } from '../../api/api';
 import { catalogProduct } from '../../api/fn/catalog-controller/catalog-product';
+import { BRAND } from '../../core/brand';
 import { CartStore } from '../../core/cart.store';
 import { errorMessage } from '../../core/errors';
 
@@ -30,10 +31,13 @@ import { errorMessage } from '../../core/errors';
           @if (p.description) {
             <p class="description">{{ p.description }}</p>
           }
+          @if (p.kind === 'SERVICE') {
+            <p class="muted">Prestation sur rendez-vous : nous vous contactons sous {{ brand.responseTime }} après la commande pour la planifier.</p>
+          }
           @if (p.inStock) {
             <div class="row">
               <label>
-                Quantité
+                {{ p.kind === 'SERVICE' ? 'Nombre de prestations' : 'Quantité' }}
                 <input #qty type="number" min="1" max="99" value="1" class="qty" />
               </label>
               <button type="button" class="btn" [disabled]="adding()" (click)="addToCart(p.id, qty.valueAsNumber)">
@@ -50,6 +54,9 @@ import { errorMessage } from '../../core/errors';
                 <a routerLink="/cart">Voir le panier</a>
               }
             </p>
+          }
+          @if (p.kind === 'SERVICE') {
+            <p class="muted">Besoin d’une prestation adaptée ? <a routerLink="/devis" [queryParams]="{ sujet: p.name }">Demander un devis</a></p>
           }
           <p class="muted sku">Réf. {{ p.sku }}</p>
         </div>
@@ -73,6 +80,7 @@ export class ProductPage {
   private readonly api = inject(Api);
   private readonly cart = inject(CartStore);
   private readonly title = inject(Title);
+  protected readonly brand = BRAND;
 
   readonly slug = input.required<string>();
 

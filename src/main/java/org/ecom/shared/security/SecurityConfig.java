@@ -46,6 +46,8 @@ class SecurityConfig {
                         // Guest carts: a token is optional, identified by the X-Cart-Id header otherwise
                         .requestMatchers("/api/cart/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/telemetry/**").permitAll()
+                        // Consulting quote form, open to visitors without an account
+                        .requestMatchers(HttpMethod.POST, "/api/quote-requests").permitAll()
                         .requestMatchers("/api/openapi/**", "/api/swagger-ui/**", "/api/swagger-ui.html").permitAll()
                         .requestMatchers("/error").permitAll()
                         // Payment provider notifications, authenticated by their signature

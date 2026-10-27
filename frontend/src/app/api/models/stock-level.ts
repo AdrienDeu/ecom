@@ -6,4 +6,5 @@ export interface StockLevel {
   onHand: number;
   productId: string;
   reserved: number;
+  tracked: boolean;
 }

@@ -22,6 +22,10 @@ interface ProductRepository extends JpaRepository<Product, UUID>, JpaSpecificati
         return (root, query, cb) -> cb.isTrue(root.get("active"));
     }
 
+    static Specification<Product> ofKind(ProductKind kind) {
+        return (root, query, cb) -> cb.equal(root.get("kind"), kind);
+    }
+
     static Specification<Product> inCategory(String categorySlug) {
         return (root, query, cb) -> cb.equal(root.get("category").get("slug"), categorySlug);
     }

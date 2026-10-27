@@ -5,6 +5,7 @@ describe('pageType', () => {
     expect(pageType('/')).toBe('CATALOG');
     expect(pageType('/?q=chaussures&page=2')).toBe('CATALOG');
     expect(pageType('/products/chaussure-rouge')).toBe('PRODUCT');
+    expect(pageType('/devis?sujet=Audit')).toBe('QUOTE');
     expect(pageType('/cart')).toBe('CART');
     expect(pageType('/checkout')).toBe('CHECKOUT');
     expect(pageType('/account/orders/0193')).toBe('ORDER');

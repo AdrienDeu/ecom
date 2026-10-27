@@ -31,6 +31,12 @@ variable "telemetry_rate_limit_per_ip" {
   default     = 300
 }
 
+variable "quote_rate_limit_per_ip" {
+  description = "Requêtes autorisées par IP sur 5 minutes vers /api/quote-requests (formulaire public de devis, anti-spam)."
+  type        = number
+  default     = 10
+}
+
 variable "log_retention_days" {
   type    = number
   default = 30
