@@ -60,6 +60,7 @@ org.ecom
 ├── customer/
 ├── quote/             # demandes de devis (conseil sur mesure)
 ├── notification/      # e-mails à l'équipe : SMTP (Mailpit) en local, API SES en AWS
+├── media/             # images produits : disque en local, bucket S3 en AWS, servies sous /media/*
 ├── payment/
 │   ├── domain/        # Payment, PaymentAttempt, PaymentStatus
 │   ├── port/          # PaymentProvider (interface)
@@ -341,6 +342,8 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 | `POST /api/orders` | client | Checkout du panier (`{addressId}`) |
 | `GET /api/orders[/{id}]`, `POST /api/orders/{id}/cancel` | client | Commandes du client |
 | `/api/admin/categories`, `/api/admin/products[/{id}[/stock]]` | `ADMIN` | Back-office catalogue et stock |
+| `POST /api/admin/products/{id}/image` (multipart, champ `file`) | `ADMIN` | Image du produit : JPEG, PNG ou WebP reconnus sur leurs premiers octets (pas de SVG), 5 Mo ; nouveau nom à chaque envoi, l'ancienne image envoyée est supprimée après le commit. `415 UNSUPPORTED_IMAGE`, `413` au-delà de 5 Mo |
+| `GET /media/**` | public | Images envoyées : servies par l'application en local, par CloudFront depuis le bucket `media` en AWS |
 | `GET /api/admin/orders?status=`, `POST /api/admin/orders/{id}/{ship\|deliver\|cancel}` | `ADMIN` | Back-office commandes |
 | `POST /api/quote-requests` | public | Demande de devis (champ piège `website` contre les robots, limite de débit WAF par IP) |
 | `GET /api/admin/quote-requests?status=`, `POST /api/admin/quote-requests/{id}/status` | `ADMIN` | Suivi des demandes de devis |

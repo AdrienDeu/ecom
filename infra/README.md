@@ -118,6 +118,16 @@ aws secretsmanager put-secret-value --secret-id "$(tofu output -raw paypal_secre
 
 Puis `paypal_enabled = true` dans `terraform.tfvars` (PR → plan → CD). Sans valeur dans le secret, les nouvelles tâches ne démarrent pas et le circuit breaker ECS revient à la révision précédente. URL du webhook à déclarer chez PayPal : `https://<domain_name>/api/webhooks/paypal`.
 
+### Images produits
+
+Le module `frontend` crée le bucket `…-media-…` (privé, SSE-S3, versions gardées 30 jours) que CloudFront sert sous
+`/media/*` ; l'application y écrit sous `media/` avec le rôle de la tâche ECS (`s3:PutObject`, `s3:DeleteObject`).
+
+**À régler avant la mise en ligne** : la règle gérée `SizeRestrictions_BODY` du WAF (groupe
+`AWSManagedRulesCommonRuleSet`) bloque les corps de requête de plus de 8 Ko, donc l'envoi d'images depuis le
+back-office. Il faut une exception limitée à `POST /api/admin/products/*/image` (la taille y est limitée à 5 Mo par
+l'application).
+
 ### Notifications par e-mail (SES)
 
 Le module `email` crée l'identité SES du domaine (signature DKIM, enregistrements dans Route 53) ; l'application envoie

@@ -220,6 +220,8 @@ locals {
     ECOM_NOTIFICATIONS_TRANSPORT        = "ses"
     ECOM_NOTIFICATIONS_FROM             = module.email.from_address
     ECOM_NOTIFICATIONS_QUOTE_RECIPIENTS = join(",", var.quote_notification_emails)
+    ECOM_MEDIA_STORAGE                  = "s3"
+    ECOM_MEDIA_BUCKET                   = module.frontend.media_bucket
   }
 
   app_secrets = merge(
@@ -256,6 +258,7 @@ module "backend" {
   secrets                     = local.app_secrets
   secret_arns                 = [module.database.master_user_secret_arn, module.cache.auth_token_secret_arn, local.paypal_secret]
   ses_identity_arns           = module.email.identity_arns
+  media_bucket_arn            = module.frontend.media_bucket_arn
   kms_key_arn                 = aws_kms_key.this.arn
   prometheus_remote_write_url = module.observability.prometheus_remote_write_url
   prometheus_workspace_arn    = module.observability.prometheus_workspace_arn
