@@ -29,12 +29,51 @@
 }
 
 .site-header__inner {
-  display: flex;
+  display: grid;
+  grid-template-areas: 'brand nav tools';
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.5rem 2rem;
   min-height: 4rem;
-  flex-wrap: wrap;
   padding-block: 0.5rem;
+}
+
+.site-header__inner > .brand {
+  grid-area: brand;
+}
+
+.site-header__inner > .site-nav {
+  grid-area: nav;
+}
+
+.tools {
+  grid-area: tools;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+// Narrow screens: brand and tools on the first row, the main navigation below it
+@media (max-width: 47.99rem) {
+  .site-header__inner {
+    grid-template-areas:
+      'brand tools'
+      'nav nav';
+    grid-template-columns: 1fr auto;
+    gap: 0.25rem 1rem;
+  }
+
+  .tools {
+    gap: 0.25rem;
+  }
+
+  .cart-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
 }
 
 .brand {
@@ -84,27 +123,20 @@
   }
 }
 
-.site-nav--user {
-  margin-left: auto;
-  font-size: 0.9375rem;
-}
-
-// Narrow screens: brand and account on the first row, the main navigation below
-@media (max-width: 47.99rem) {
-  .site-nav--user {
-    order: 1;
-  }
-
-  .site-nav:not(.site-nav--user) {
-    order: 2;
-    flex-basis: 100%;
-  }
-}
-
 .cart-link {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-weight: 550;
+  text-decoration: none;
+
+  &:hover,
+  &.active {
+    color: var(--text);
+  }
 }
 
 .badge {
