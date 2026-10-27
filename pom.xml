@@ -31,7 +31,7 @@
         <springdoc.version>3.2.0</springdoc.version>
         <resilience4j.version>2.4.0</resilience4j.version>
         <wiremock.version>3.13.2</wiremock.version>
-        <!-- Instrumentation release built on the OpenTelemetry SDK managed by Spring Boot -->
+        <aws-sdk.version>2.57.4</aws-sdk.version>
         <jacoco.version>0.8.16</jacoco.version>
         <spotless.version>3.10.4</spotless.version>
         <spotbugs-plugin.version>4.10.5.0</spotbugs-plugin.version>
@@ -43,6 +43,17 @@
              empêche l'application de démarrer en local (NoClassDefFoundError), sans qu'aucun test ne le voie. -->
         <opentelemetry-instrumentation.version>2.28.1-alpha</opentelemetry-instrumentation.version>
     </properties>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <!-- Web -->
         <dependency>
@@ -103,6 +114,23 @@
             <version>${resilience4j.version}</version>
         </dependency>
 
+        <!-- Notifications : SMTP en local (Mailpit), API Amazon SES en AWS (rôle de la tâche, pas de clé) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>sesv2</artifactId>
+            <exclusions>
+                <!-- Client synchrone uniquement -->
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
         <!-- Observability -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -144,6 +172,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

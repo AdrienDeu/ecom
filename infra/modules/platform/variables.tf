@@ -113,6 +113,12 @@ variable "deletion_protection" {
   default     = true
 }
 
+variable "quote_notification_emails" {
+  description = "Adresses prévenues de chaque demande de devis (aucune : pas d'e-mail)."
+  type        = list(string)
+  default     = []
+}
+
 variable "alert_emails" {
   type    = list(string)
   default = []

@@ -6,9 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.time.Duration;
+
 import io.micrometer.core.instrument.MeterRegistry;
+import org.awaitility.Awaitility;
 import org.ecom.ApiTestSupport;
 import org.ecom.IntegrationTest;
+import org.ecom.RecordingEmailSender;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -17,6 +21,9 @@ class QuoteIT extends ApiTestSupport {
 
     @Autowired
     MeterRegistry registry;
+
+    @Autowired
+    RecordingEmailSender emails;
 
     @Test
     void visitorAsksForAQuoteThatTheAdminFollowsUp() throws Exception {
@@ -31,6 +38,13 @@ class QuoteIT extends ApiTestSupport {
 
         assertThat(registry.get("ecom.quote.requests").tag("outcome", "received").counter().count())
                 .isEqualTo(received + 1);
+        // The team is emailed after the request is saved, on another thread
+        Awaitility.await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(emails.sent())
+                .anySatisfy(email -> {
+                    assertThat(email.to()).containsExactly("devis@example.test");
+                    assertThat(email.replyTo()).isEqualTo("jeanne@example.com");
+                    assertThat(email.body()).contains(company);
+                }));
         var list = mvc.perform(get("/api/admin/quote-requests").param("status", "NEW").with(admin()))
                 .andExpect(status().isOk())
                 .andReturn();
@@ -62,6 +76,7 @@ class QuoteIT extends ApiTestSupport {
                 .andExpect(status().isAccepted());
 
         assertThat(registry.get("ecom.quote.requests").tag("outcome", "spam").counter().count()).isEqualTo(spam + 1);
+        assertThat(emails.sent()).noneSatisfy(email -> assertThat(email.body()).contains(company));
         mvc.perform(get("/api/admin/quote-requests").param("size", "1000").with(admin()))
                 .andExpect(jsonPath("$.content[?(@.company == '%s')]".formatted(company)).isEmpty());
     }
