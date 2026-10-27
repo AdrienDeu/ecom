@@ -11,12 +11,22 @@ import { adminCatalogUpdateStock } from '../../api/fn/admin-catalog-controller/a
 import { adminCatalogUploadImage } from '../../api/fn/admin-catalog-controller/admin-catalog-upload-image';
 import { catalogCategories } from '../../api/fn/catalog-controller/catalog-categories';
 import { errorMessage } from '../../core/errors';
+import {
+  formatSize,
+  ImageOptimizationError,
+  ImageProblem,
+  MAX_IMAGE_SIDE,
+  OptimizedImage,
+  optimizeImage,
+} from '../../core/image-optimizer';
 import { ProductKind } from '../../core/labels';
 import { AdminNav } from './admin-nav';
 
-/** Same limits as the API (ImageFormat, spring.servlet.multipart.max-file-size), checked first for a clear message. */
-const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const IMAGE_PROBLEMS: Record<ImageProblem, string> = {
+  'not-an-image': "Ce fichier n'est pas une image.",
+  'too-large': "L'image dépasse 40 Mo.",
+  unreadable: "Votre navigateur ne sait pas lire ce format d'image : enregistrez-la en JPEG ou PNG puis réessayez.",
+};
 
 @Component({
   selector: 'app-admin-product-page',
@@ -95,17 +105,25 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
             <div class="row">
               <label class="btn secondary file">
                 Choisir une image
-                <input type="file" accept="image/jpeg,image/png,image/webp" (change)="pickImage($event)" />
+                <input type="file" accept="image/*" [disabled]="optimizing()" (change)="pickImage($event)" />
               </label>
               @if (pickedFile() && !isNew()) {
                 <button type="button" class="btn" [disabled]="busy()" (click)="uploadImage()">Enregistrer l'image</button>
               }
             </div>
             <p class="muted hint">
-              JPEG, PNG ou WebP, 5 Mo maximum.
-              @if (isNew()) { L'image est envoyée à l'enregistrement du produit. }
-              @if (pickedFile(); as file) { Choisie : {{ file.name }}. }
+              Toute image courante, y compris une photo de téléphone : elle est redressée, réduite à
+              {{ maxSide }} px et compressée automatiquement.
+              @if (isNew()) { Elle est envoyée à l'enregistrement du produit. }
             </p>
+            @if (optimizing()) {
+              <p class="muted hint" role="status">Optimisation de l'image…</p>
+            } @else if (optimized(); as o) {
+              <p class="hint optimized" role="status">
+                Optimisée : {{ o.width }} × {{ o.height }} px, {{ formatType(o.file.type) }}, {{ size(o.file.size) }}
+                @if (o.originalSize > o.file.size) { au lieu de {{ size(o.originalSize) }} }
+              </p>
+            }
             <label>
               Ou adresse d'une image en ligne
               <input formControlName="imageUrl" type="url" placeholder="https://…" />
@@ -171,6 +189,7 @@ const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
     .file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     .file:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
     .hint { margin: 0; font-size: 0.875rem; }
+    .optimized { color: var(--success); }
     .stock, .new-category { margin-top: 1.5rem; }
     .qty { width: 7rem; }
     .grow { flex: 1 1 14rem; }
@@ -188,8 +207,12 @@ export class AdminProductPage {
   protected readonly isNew = computed(() => !this.id());
 
   protected readonly busy = signal(false);
-  /** Image chosen on this computer, not uploaded yet, and its preview (a data: URL, allowed by the CSP). */
-  protected readonly pickedFile = signal<File | null>(null);
+  /** Image chosen on this computer, optimized, not uploaded yet, and its preview (a data: URL, allowed by the CSP). */
+  protected readonly optimized = signal<OptimizedImage | null>(null);
+  protected readonly pickedFile = computed(() => this.optimized()?.file ?? null);
+  protected readonly optimizing = signal(false);
+  protected readonly maxSide = MAX_IMAGE_SIDE;
+  protected readonly size = formatSize;
   private readonly pickedPreview = signal<string | null>(null);
   protected readonly preview = computed(() => this.pickedPreview() ?? this.product.value()?.imageUrl ?? null);
   protected readonly message = signal<{ text: string; error: boolean } | null>(null);
@@ -272,26 +295,32 @@ export class AdminProductPage {
     });
   }
 
-  protected pickImage(event: Event): void {
+  protected async pickImage(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
     if (!file) {
       return;
     }
-    if (!IMAGE_TYPES.includes(file.type)) {
-      this.message.set({ text: 'Choisissez une image JPEG, PNG ou WebP.', error: true });
-      return;
-    }
-    if (file.size > MAX_IMAGE_SIZE) {
-      this.message.set({ text: "L'image dépasse 5 Mo.", error: true });
-      return;
-    }
     this.message.set(null);
-    this.pickedFile.set(file);
-    const reader = new FileReader();
-    reader.onload = () => this.pickedPreview.set(reader.result as string);
-    reader.readAsDataURL(file);
+    this.optimizing.set(true);
+    try {
+      const optimized = await optimizeImage(file);
+      this.optimized.set(optimized);
+      const reader = new FileReader();
+      reader.onload = () => this.pickedPreview.set(reader.result as string);
+      reader.readAsDataURL(optimized.file);
+    } catch (error) {
+      this.clearPickedImage();
+      const problem = error instanceof ImageOptimizationError ? error.problem : 'unreadable';
+      this.message.set({ text: IMAGE_PROBLEMS[problem], error: true });
+    } finally {
+      this.optimizing.set(false);
+    }
+  }
+
+  protected formatType(type: string): string {
+    return type === 'image/webp' ? 'WebP' : 'JPEG';
   }
 
   protected uploadImage(): Promise<void> {
@@ -308,7 +337,7 @@ export class AdminProductPage {
   }
 
   private clearPickedImage(): void {
-    this.pickedFile.set(null);
+    this.optimized.set(null);
     this.pickedPreview.set(null);
   }
 

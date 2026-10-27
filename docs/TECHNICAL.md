@@ -343,6 +343,7 @@ JwtAuthenticationConverter cognitoGroupsConverter() {
 | `GET /api/orders[/{id}]`, `POST /api/orders/{id}/cancel` | client | Commandes du client |
 | `/api/admin/categories`, `/api/admin/products[/{id}[/stock]]` | `ADMIN` | Back-office catalogue et stock |
 | `POST /api/admin/products/{id}/image` (multipart, champ `file`) | `ADMIN` | Image du produit : JPEG, PNG ou WebP reconnus sur leurs premiers octets (pas de SVG), 5 Mo ; nouveau nom à chaque envoi, l'ancienne image envoyée est supprimée après le commit. `415 UNSUPPORTED_IMAGE`, `413` au-delà de 5 Mo |
+| *(back-office)* | | Avant l'envoi, la SPA optimise l'image (`core/image-optimizer.ts`) : décodage par le navigateur (tout format qu'il lit, orientation EXIF appliquée), 1 600 px au plus, réencodage WebP qualité 0,82 (JPEG sur fond blanc si le WebP n'est pas encodable), ce qui retire aussi les métadonnées (position GPS…). Les contrôles du serveur restent la référence |
 | `GET /media/**` | public | Images envoyées : servies par l'application en local, par CloudFront depuis le bucket `media` en AWS |
 | `GET /api/admin/orders?status=`, `POST /api/admin/orders/{id}/{ship\|deliver\|cancel}` | `ADMIN` | Back-office commandes |
 | `POST /api/quote-requests` | public | Demande de devis (champ piège `website` contre les robots, limite de débit WAF par IP) |
