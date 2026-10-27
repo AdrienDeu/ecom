@@ -76,7 +76,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] **Back-office API** : produits, catégories, stock, commandes (expédition, livraison, annulation)
 - [x] Réservation de stock atomique au checkout (pas de survente, testé en concurrence), libération à l'annulation et à l'expiration (job `SKIP LOCKED`, multi-instances)
 - [x] Remboursements (étape 4, via le module paiement)
-- [ ] Clé d'idempotence sur `POST /api/orders` (double-clic → une seule commande)
+- [x] Clé d'idempotence sur `POST /api/orders` (en-tête `Idempotency-Key`, unique par client : double-clic ou nouvel essai → une seule commande)
 - [ ] Cache du catalogue (`@Cacheable`) si les tests de charge le justifient
 
 ### 3b — Frontend Angular

@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -89,7 +90,7 @@ class OrderIT extends ApiTestSupport {
             var customer = unique("buyer");
             var address = createAddress(customer);
             addToCart(customer, productId, 1);
-            tasks.add(() -> orders.checkout(customer, address));
+            tasks.add(() -> orders.checkout(customer, address, null));
         }
 
         int succeeded = 0;
@@ -184,6 +185,55 @@ class OrderIT extends ApiTestSupport {
         mvc.perform(json(post("/api/orders").with(customer(customer)), """
                         {"addressId": "%s"}""".formatted(foreignAddress)))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void replayedCheckoutReturnsTheOrderAlreadyPlaced() throws Exception {
+        var productId = createProduct("10", 5);
+        var customer = unique("ivy");
+        var address = createAddress(customer);
+        addToCart(customer, productId, 2);
+        var key = UUID.randomUUID().toString();
+
+        var first = mvc.perform(json(post("/api/orders").with(customer(customer)).header("Idempotency-Key", key), """
+                        {"addressId": "%s"}""".formatted(address)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String orderId = read(first, "$.id");
+        // The cart is now empty: without the key, this would fail with EMPTY_CART
+        mvc.perform(json(post("/api/orders").with(customer(customer)).header("Idempotency-Key", key), """
+                        {"addressId": "%s"}""".formatted(address)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(orderId));
+
+        assertThat(inventory.level(productId).reserved()).isEqualTo(2);
+        // The same key from another customer is unrelated
+        mvc.perform(json(post("/api/orders").with(customer(unique("jack"))).header("Idempotency-Key", key), """
+                        {"addressId": "%s"}""".formatted(address)))
+                .andExpect(jsonPath("$.code").value("EMPTY_CART"));
+    }
+
+    @Test
+    void concurrentCheckoutsWithTheSameKeyPlaceOneOrder() throws Exception {
+        var productId = createProduct("10", 10);
+        var customer = unique("kate");
+        var address = createAddress(customer);
+        addToCart(customer, productId, 1);
+        var key = UUID.randomUUID();
+        var tasks = new ArrayList<Callable<OrderView>>();
+        for (int i = 0; i < 4; i++) {
+            tasks.add(() -> orders.checkout(customer, address, key));
+        }
+
+        var placed = new HashSet<UUID>();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (var future : executor.invokeAll(tasks)) {
+                placed.add(future.get().id());
+            }
+        }
+
+        assertThat(placed).hasSize(1);
+        assertThat(inventory.level(productId).reserved()).isEqualTo(1);
     }
 
     private UUID placeOrder(String customer, UUID productId, int quantity) throws Exception {

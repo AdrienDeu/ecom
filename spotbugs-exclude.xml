@@ -25,6 +25,10 @@
             <Class name="org.ecom.payment.Payment"/>
             <Class name="org.ecom.payment.PaymentAttempt"/>
             <Class name="org.ecom.payment.WebhookEvent"/>
+            <And>
+                <Class name="org.ecom.order.CustomerOrder"/>
+                <Field name="idempotencyKey"/>
+            </And>
         </Or>
     </Match>
 

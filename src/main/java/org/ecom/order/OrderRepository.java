@@ -14,6 +14,8 @@ interface OrderRepository extends JpaRepository<CustomerOrder, UUID> {
 
     Optional<CustomerOrder> findByIdAndCustomerId(UUID id, String customerId);
 
+    Optional<CustomerOrder> findByCustomerIdAndIdempotencyKey(String customerId, UUID idempotencyKey);
+
     Page<CustomerOrder> findByCustomerId(String customerId, Pageable pageable);
 
     Page<CustomerOrder> findByStatus(OrderStatus status, Pageable pageable);
