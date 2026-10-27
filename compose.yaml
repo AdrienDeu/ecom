@@ -56,7 +56,7 @@ services:
 
   # Traces OTLP de l'application (http://localhost:4318/v1/traces), consultées dans Grafana
   tempo:
-    image: grafana/tempo:2.10.10
+    image: grafana/tempo:3.1.1
     command: ["-config.file=/etc/tempo/tempo.yml"]
     ports:
       - "4318:4318"
