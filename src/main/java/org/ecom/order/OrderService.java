@@ -104,7 +104,8 @@ public class OrderService {
                 throw new BusinessException("PRODUCT_UNAVAILABLE", "Product %s is no longer available".formatted(item.productId()));
             }
             inventory.reserve(product.id(), product.sku(), item.quantity());
-            lines.add(new OrderLine(product.id(), product.sku(), product.name(), product.price(), item.quantity()));
+            lines.add(new OrderLine(product.id(), product.sku(), product.name(), product.kind(), product.price(),
+                    item.quantity()));
         }
 
         // Flushed now so that a duplicate idempotency key fails here, before the cart is cleared

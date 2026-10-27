@@ -101,7 +101,7 @@ Feuille de route du projet, ordonnée par étapes. Chaque étape doit être **li
 - [x] Identité de la boutique centralisée (`frontend/src/app/core/brand.ts`) ; une boutique par branche `shop/<nom>` (cf. README)
 - [ ] Prix HT/TTC : affichage configurable par boutique (clientèle professionnelle) et mentions de facturation
 - [ ] Notification e-mail à la réception d'une demande de devis (Amazon SES)
-- [ ] Commandes de prestations : statuts adaptés (planifiée, réalisée) au lieu d'« expédiée / livrée »
+- [x] Commandes de prestations : « Planifiée » / « Réalisée » au lieu d'« Expédiée » / « Livrée » (type figé sur chaque ligne de commande)
 - [ ] Déploiement d'une boutique : environnements et CD par branche `shop/*`
 
 ## Étape 4 — Paiement (PayPal, extensible)
