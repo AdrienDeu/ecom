@@ -9,6 +9,7 @@ import org.ecom.quote.QuoteDtos.QuoteRequestView;
 import org.ecom.shared.web.ResourceNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -21,11 +22,13 @@ public class QuoteService {
     private static final Logger log = LoggerFactory.getLogger(QuoteService.class);
 
     private final QuoteRequestRepository quotes;
+    private final ApplicationEventPublisher events;
     private final Counter received;
     private final Counter rejected;
 
-    QuoteService(QuoteRequestRepository quotes, MeterRegistry registry) {
+    QuoteService(QuoteRequestRepository quotes, ApplicationEventPublisher events, MeterRegistry registry) {
         this.quotes = quotes;
+        this.events = events;
         this.received = Counter.builder("ecom.quote.requests").description("Consulting quote requests")
                 .tag("outcome", "received").register(registry);
         this.rejected = Counter.builder("ecom.quote.requests").description("Consulting quote requests")
@@ -42,6 +45,7 @@ public class QuoteService {
         var quote = quotes.save(new QuoteRequest(form.fullName().strip(), form.email().strip(), blankToNull(form.company()),
                 blankToNull(form.phone()), blankToNull(form.topic()), form.message().strip()));
         received.increment();
+        events.publishEvent(QuoteRequested.of(quote));
         // No personal data in the logs: the id is enough to find the request in the back-office
         log.info("Quote request {} received", quote.getId());
     }

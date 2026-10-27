@@ -27,7 +27,9 @@ max_tasks   = 8
 paypal_enabled  = false
 paypal_base_url = "https://api-m.paypal.com"
 
-deletion_protection    = true
-alert_emails           = []
-enable_managed_grafana = false
-log_retention_days     = 90
+deletion_protection = true
+alert_emails        = []
+# Prévenues de chaque demande de devis (vérification SES à confirmer tant que le compte est en sandbox)
+quote_notification_emails = []
+enable_managed_grafana    = false
+log_retention_days        = 90

@@ -118,6 +118,19 @@ aws secretsmanager put-secret-value --secret-id "$(tofu output -raw paypal_secre
 
 Puis `paypal_enabled = true` dans `terraform.tfvars` (PR → plan → CD). Sans valeur dans le secret, les nouvelles tâches ne démarrent pas et le circuit breaker ECS revient à la révision précédente. URL du webhook à déclarer chez PayPal : `https://<domain_name>/api/webhooks/paypal`.
 
+### Notifications par e-mail (SES)
+
+Le module `email` crée l'identité SES du domaine (signature DKIM, enregistrements dans Route 53) ; l'application envoie
+par l'API SES avec le rôle de la tâche ECS, sans identifiant SMTP. Pour être prévenu des demandes de devis :
+
+1. `quote_notification_emails = ["devis@<domaine>"]` dans `terraform.tfvars` (PR → plan → CD) ;
+2. chaque adresse reçoit un e-mail de vérification d'AWS, à confirmer : tant que le compte SES est en **sandbox**, seuls
+   les destinataires vérifiés reçoivent ;
+3. pour la production, demander la sortie du sandbox SES (console SES → *Get set up* → *Request production access*).
+
+Sans destinataire, rien n'est envoyé ; les demandes restent dans le back-office. Métrique :
+`ecom_notifications_total{outcome="failed"}` pour les échecs d'envoi.
+
 ## 4. Déploiements (CD)
 
 Chaque merge dans `main` déclenche `cd.yml` :
