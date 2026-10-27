@@ -3,7 +3,7 @@ import { Component, inject, resource } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Api } from '../../api/api';
 import { orderMyOrders } from '../../api/fn/order-controller/order-my-orders';
-import { ORDER_STATUS_LABELS } from '../../core/labels';
+import { orderStatusLabel } from '../../core/labels';
 import { AccountNav } from './account-nav';
 
 @Component({
@@ -28,7 +28,7 @@ import { AccountNav } from './account-nav';
                 <tr>
                   <td><a [routerLink]="[order.id]">{{ order.reference }}</a></td>
                   <td>{{ order.createdAt | date: 'medium' }}</td>
-                  <td><span class="status">{{ labels[order.status] }}</span></td>
+                  <td><span class="status">{{ statusLabel(order) }}</span></td>
                   <td class="price">{{ order.total.amount | currency: order.total.currency }}</td>
                 </tr>
               }
@@ -43,6 +43,6 @@ import { AccountNav } from './account-nav';
 })
 export class OrdersPage {
   private readonly api = inject(Api);
-  protected readonly labels = ORDER_STATUS_LABELS;
+  protected readonly statusLabel = orderStatusLabel;
   protected readonly orders = resource({ loader: () => this.api.invoke(orderMyOrders, { size: 50 }) });
 }

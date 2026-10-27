@@ -5,7 +5,7 @@ import { Api } from '../../api/api';
 import { orderCancel } from '../../api/fn/order-controller/order-cancel';
 import { orderMyOrder } from '../../api/fn/order-controller/order-my-order';
 import { errorMessage } from '../../core/errors';
-import { isCancellable, ORDER_STATUS_LABELS } from '../../core/labels';
+import { isCancellable, orderStatusLabel } from '../../core/labels';
 import { PaymentPanel } from './payment-panel';
 
 @Component({
@@ -24,7 +24,7 @@ import { PaymentPanel } from './payment-panel';
     } @else if (order.value(); as o) {
       <div class="row spread">
         <h1>Commande {{ o.reference }}</h1>
-        <span class="status">{{ labels[o.status] }}</span>
+        <span class="status">{{ statusLabel(o) }}</span>
       </div>
       <p class="muted">Passée le {{ o.createdAt | date: 'long' }}</p>
       @if (o.expiresAt) {
@@ -36,7 +36,10 @@ import { PaymentPanel } from './payment-panel';
         <app-payment-panel [orderId]="o.id" (settled)="order.reload()" />
       }
       @if (o.status === 'PAID') {
-        <p class="alert success" role="status">Paiement reçu, merci ! Nous préparons votre commande.</p>
+        <p class="alert success" role="status">
+          Paiement reçu, merci !
+          {{ o.servicesOnly ? 'Nous vous contactons pour planifier la prestation.' : 'Nous préparons votre commande.' }}
+        </p>
       }
       <div class="layout">
         <section class="card table-scroll">
@@ -91,7 +94,7 @@ export class OrderPage {
   /** Set by the checkout page (?created=1). */
   readonly created = input(false, { transform: (value: unknown) => value === '1' || value === true });
 
-  protected readonly labels = ORDER_STATUS_LABELS;
+  protected readonly statusLabel = orderStatusLabel;
   protected readonly cancellable = isCancellable;
   protected readonly busy = signal(false);
   protected readonly error = signal<string | null>(null);

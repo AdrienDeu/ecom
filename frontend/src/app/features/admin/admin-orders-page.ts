@@ -10,7 +10,7 @@ import { adminPaymentList } from '../../api/fn/admin-payment-controller/admin-pa
 import { adminPaymentRefund } from '../../api/fn/admin-payment-controller/admin-payment-refund';
 import { OrderView } from '../../api/models/order-view';
 import { errorMessage } from '../../core/errors';
-import { isCancellable, ORDER_STATUS_LABELS, ORDER_STATUSES, OrderStatus } from '../../core/labels';
+import { isCancellable, ORDER_STATUSES, OrderStatus, orderStatusFilterLabel, orderStatusLabel } from '../../core/labels';
 import { AdminNav } from './admin-nav';
 
 type Action = 'ship' | 'deliver' | 'cancel';
@@ -28,7 +28,7 @@ const ACTIONS = { ship: adminOrderShip, deliver: adminOrderDeliver, cancel: admi
       <select [value]="status() ?? ''" (change)="filter($any($event.target).value)">
         <option value="">Tous</option>
         @for (s of statuses; track s) {
-          <option [value]="s">{{ labels[s] }}</option>
+          <option [value]="s">{{ filterLabel(s) }}</option>
         }
       </select>
     </label>
@@ -48,14 +48,14 @@ const ACTIONS = { ship: adminOrderShip, deliver: adminOrderDeliver, cancel: admi
                 <td>{{ o.createdAt | date: 'short' }}</td>
                 <td>{{ o.shippingAddress.fullName }}<br /><span class="muted">{{ o.shippingAddress.city }}</span></td>
                 <td class="price">{{ o.total.amount | currency: o.total.currency }}</td>
-                <td><span class="status">{{ labels[o.status] }}</span></td>
+                <td><span class="status">{{ statusLabel(o) }}</span></td>
                 <td>
                   <div class="row actions">
                   @if (o.status === 'PAID') {
-                    <button type="button" class="btn secondary" [disabled]="busy()" (click)="act(o, 'ship')">Expédier</button>
+                    <button type="button" class="btn secondary" [disabled]="busy()" (click)="act(o, 'ship')">{{ o.servicesOnly ? 'Planifier' : 'Expédier' }}</button>
                   }
                   @if (o.status === 'SHIPPED') {
-                    <button type="button" class="btn secondary" [disabled]="busy()" (click)="act(o, 'deliver')">Livrée</button>
+                    <button type="button" class="btn secondary" [disabled]="busy()" (click)="act(o, 'deliver')">{{ o.servicesOnly ? 'Marquer réalisée' : 'Livrée' }}</button>
                   }
                   @if (cancellable(o.status)) {
                     <button type="button" class="btn danger" [disabled]="busy()" (click)="act(o, 'cancel')">Annuler</button>
@@ -87,7 +87,8 @@ export class AdminOrdersPage {
 
   readonly status = input<OrderStatus>();
 
-  protected readonly labels = ORDER_STATUS_LABELS;
+  protected readonly statusLabel = orderStatusLabel;
+  protected readonly filterLabel = orderStatusFilterLabel;
   protected readonly statuses = ORDER_STATUSES;
   protected readonly cancellable = isCancellable;
   protected readonly busy = signal(false);
