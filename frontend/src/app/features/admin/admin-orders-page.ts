@@ -10,7 +10,14 @@ import { adminPaymentList } from '../../api/fn/admin-payment-controller/admin-pa
 import { adminPaymentRefund } from '../../api/fn/admin-payment-controller/admin-payment-refund';
 import { OrderView } from '../../api/models/order-view';
 import { errorMessage } from '../../core/errors';
-import { isCancellable, ORDER_STATUSES, OrderStatus, orderStatusFilterLabel, orderStatusLabel } from '../../core/labels';
+import {
+  isCancellable,
+  ORDER_STATUSES,
+  OrderStatus,
+  orderStatusFilterLabel,
+  orderStatusLabel,
+  orderStatusTone,
+} from '../../core/labels';
 import { AdminNav } from './admin-nav';
 
 type Action = 'ship' | 'deliver' | 'cancel';
@@ -48,7 +55,7 @@ const ACTIONS = { ship: adminOrderShip, deliver: adminOrderDeliver, cancel: admi
                 <td>{{ o.createdAt | date: 'short' }}</td>
                 <td>{{ o.shippingAddress.fullName }}<br /><span class="muted">{{ o.shippingAddress.city }}</span></td>
                 <td class="price">{{ o.total.amount | currency: o.total.currency }}</td>
-                <td><span class="status">{{ statusLabel(o) }}</span></td>
+                <td><span class="status" [attr.data-tone]="statusTone(o.status)">{{ statusLabel(o) }}</span></td>
                 <td>
                   <div class="row actions">
                   @if (o.status === 'PAID') {
@@ -88,6 +95,7 @@ export class AdminOrdersPage {
   readonly status = input<OrderStatus>();
 
   protected readonly statusLabel = orderStatusLabel;
+  protected readonly statusTone = orderStatusTone;
   protected readonly filterLabel = orderStatusFilterLabel;
   protected readonly statuses = ORDER_STATUSES;
   protected readonly cancellable = isCancellable;

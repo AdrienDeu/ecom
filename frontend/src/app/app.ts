@@ -4,10 +4,12 @@ import { AuthService } from './core/auth.service';
 import { RuntimeConfigStore } from './core/auth-config';
 import { BRAND } from './core/brand';
 import { CartStore } from './core/cart.store';
+import { Icon } from './shared/icon';
+import { ThemeToggle } from './shared/theme-toggle';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon, ThemeToggle],
   template: `
     <header class="site-header">
       <div class="container site-header__inner">
@@ -24,7 +26,9 @@ import { CartStore } from './core/cart.store';
           } @else {
             <button type="button" class="link" (click)="auth.login()">Connexion</button>
           }
+          <app-theme-toggle />
           <a routerLink="/cart" routerLinkActive="active" class="cart-link">
+            <app-icon name="cart" />
             Panier
             @if (cart.itemCount() > 0) {
               <span class="badge" aria-label="articles">{{ cart.itemCount() }}</span>

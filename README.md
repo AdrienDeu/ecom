@@ -88,7 +88,9 @@ observabilité, infrastructure. Chaque boutique concrète vit dans sa propre bra
 `shop/<nom>` (ex. `shop/relais-informatique`), qui n'ajoute que ce qui lui est propre :
 
 - identité : `frontend/src/app/core/brand.ts` (nom, accroche, contact) ;
-- design et pages : styles, page d'accueil, présentation du catalogue, textes ;
+- design et pages : styles, page d'accueil, présentation du catalogue, textes. Les couleurs sont des variables CSS
+  (`--bg`, `--text`, `--accent`…) définies sur `:root` pour le thème clair et sur `:root[data-theme='dark']` pour le
+  sombre : le sélecteur de thème (clair, sombre, système) et `public/theme-init.js` posent `data-theme` ;
 - catalogue de démonstration local (`src/main/resources/db/demo/`, profil `local`).
 
 Règles :

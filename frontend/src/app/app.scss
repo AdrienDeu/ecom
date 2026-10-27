@@ -58,5 +58,7 @@
 }
 
 main {
+  // Wide content (tables) scrolls inside its card instead of widening the page
+  min-width: 0;
   padding-block: 2rem 4rem;
 }

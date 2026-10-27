@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --bg: #f7f7f5;
   --surface: #ffffff;
@@ -26,20 +26,21 @@
   background: var(--bg);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141413;
-    --surface: #1d1d1b;
-    --border: #33332f;
-    --text: #ededea;
-    --text-muted: #a3a39d;
-    --accent: #5fb592;
-    --accent-hover: #7cc7a7;
-    --on-accent: #0e1f18;
-    --danger: #f2a39d;
-    --success: #8fd6a8;
-    --warning: #f0c36a;
-  }
+// Dark colours: set by ThemeStore (or public/theme-init.js) from the visitor's choice or the system preference
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #141413;
+  --surface: #1d1d1b;
+  --border: #33332f;
+  --text: #ededea;
+  --text-muted: #a3a39d;
+  --accent: #5fb592;
+  --accent-hover: #7cc7a7;
+  --on-accent: #0e1f18;
+  --danger: #f2a39d;
+  --success: #8fd6a8;
+  --warning: #f0c36a;
 }
 
 *,
@@ -230,6 +231,27 @@ input[type='radio'] {
   border: 1px solid var(--border);
   font-size: 0.8125rem;
   white-space: nowrap;
+}
+
+// Tone of a status pill (orderStatusTone, quoteStatusTone): waiting on someone, under way, done, or closed
+.status[data-tone='pending'] {
+  border-color: color-mix(in srgb, var(--warning) 45%, transparent);
+  color: var(--warning);
+}
+
+.status[data-tone='active'] {
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+
+.status[data-tone='done'] {
+  border-color: color-mix(in srgb, var(--success) 45%, transparent);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  color: var(--success);
+}
+
+.status[data-tone='closed'] {
+  color: var(--text-muted);
 }
 
 table {
