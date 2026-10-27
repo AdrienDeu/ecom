@@ -1,15 +1,31 @@
 import { Routes } from '@angular/router';
+import { BRAND } from './core/brand';
 import { adminGuard, authGuard } from './core/guards';
+
+const name = BRAND.name;
 
 export const routes: Routes = [
   {
     path: '',
-    title: 'Boutique',
+    pathMatch: 'full',
+    title: `${name} | ${BRAND.tagline}`,
+    loadComponent: () => import('./features/home/home-page').then((m) => m.HomePage),
+  },
+  {
+    path: 'conseil',
+    title: `Forfaits de conseil | ${name}`,
+    data: { kind: 'SERVICE' },
+    loadComponent: () => import('./features/catalog/catalog-page').then((m) => m.CatalogPage),
+  },
+  {
+    path: 'materiel',
+    title: `Matériel informatique | ${name}`,
+    data: { kind: 'PRODUCT' },
     loadComponent: () => import('./features/catalog/catalog-page').then((m) => m.CatalogPage),
   },
   {
     path: 'devis',
-    title: 'Demander un devis',
+    title: `Demander un devis | ${name}`,
     loadComponent: () => import('./features/quote/quote-page').then((m) => m.QuotePage),
   },
   {

@@ -13,7 +13,10 @@ import { errorMessage } from '../../core/errors';
     <div class="layout">
       <header class="intro">
         <h1>Demander un devis</h1>
-        <p>Pour un besoin sur mesure ou une prestation qui n’est pas au catalogue, décrivez votre projet.</p>
+        <p>
+          Pour un besoin qui dépasse nos forfaits : un parc plus grand, plusieurs sites, un projet de migration
+          complet, un accompagnement dans la durée.
+        </p>
         <p class="muted">
           Nous vous répondons sous {{ brand.responseTime }} avec une proposition ou quelques questions. Votre demande
           ne sert qu’à vous recontacter.
@@ -24,7 +27,7 @@ import { errorMessage } from '../../core/errors';
         <section class="card done" role="status">
           <h2>Demande envoyée</h2>
           <p>Merci. Nous revenons vers vous sous {{ brand.responseTime }} à l’adresse indiquée.</p>
-          <p><a routerLink="/">Retour au catalogue</a></p>
+          <p><a routerLink="/conseil">Voir les forfaits de conseil</a></p>
         </section>
       } @else {
         <form [formGroup]="form" (ngSubmit)="submit()" class="card stack" novalidate>
@@ -53,7 +56,7 @@ import { errorMessage } from '../../core/errors';
           </div>
           <label>
             <span>Sujet <span class="optional">(facultatif)</span></span>
-            <input formControlName="topic" />
+            <input formControlName="topic" placeholder="Ex. audit de sécurité, migration vers le cloud" />
           </label>
           <label>
             Votre besoin

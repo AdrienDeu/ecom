@@ -1,22 +1,44 @@
-import { CurrencyPipe } from '@angular/common';
-import { Component, inject, input, numberAttribute, resource } from '@angular/core';
+import { Component, computed, inject, input, numberAttribute, resource } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { Api } from '../../api/api';
 import { catalogCategories } from '../../api/fn/catalog-controller/catalog-categories';
 import { catalogProducts } from '../../api/fn/catalog-controller/catalog-products';
+import { BRAND } from '../../core/brand';
+import { ProductKind } from '../../core/labels';
+import { ProductGrid } from './product-grid';
+import { ServiceList } from './service-list';
 
 const PAGE_SIZE = 24;
 
+const COPY: Record<ProductKind, { title: string; intro: string; search: string; empty: string }> = {
+  SERVICE: {
+    title: 'Forfaits de conseil',
+    intro: 'Un périmètre défini, un prix fixe. Commandez en ligne : un consultant vous appelle pour planifier l’intervention.',
+    search: 'Rechercher un forfait',
+    empty: 'Aucun forfait ne correspond à votre recherche.',
+  },
+  PRODUCT: {
+    title: 'Matériel informatique',
+    intro: 'Postes de travail, écrans, réseau et accessoires sélectionnés pour un usage professionnel.',
+    search: 'Rechercher un produit',
+    empty: 'Aucun produit ne correspond à votre recherche.',
+  },
+};
+
+/** Consulting packages (/conseil) or hardware (/materiel): the route sets the kind. */
 @Component({
   selector: 'app-catalog-page',
-  imports: [RouterLink, CurrencyPipe],
+  imports: [RouterLink, ProductGrid, ServiceList],
   template: `
-    <h1>Catalogue</h1>
+    <header class="intro">
+      <h1>{{ copy().title }}</h1>
+      <p class="muted">{{ copy().intro }}</p>
+    </header>
 
     <form class="row filters" role="search" (submit)="$event.preventDefault(); search(query.value, categorySelect.value)">
       <label class="grow">
-        <span class="sr-only">Rechercher</span>
-        <input #query type="search" placeholder="Rechercher un produit" [value]="q() ?? ''" />
+        <span class="sr-only">{{ copy().search }}</span>
+        <input #query type="search" [placeholder]="copy().search" [value]="q() ?? ''" />
       </label>
       <label>
         <span class="sr-only">Catégorie</span>
@@ -27,88 +49,91 @@ const PAGE_SIZE = 24;
           }
         </select>
       </label>
-      <button type="submit" class="btn">Rechercher</button>
+      <button type="submit" class="btn secondary">Rechercher</button>
     </form>
 
     @if (products.error()) {
-      <p class="alert error">Le catalogue est momentanément indisponible.</p>
+      <p class="alert error">Le catalogue ne peut pas être chargé. Vérifiez votre connexion puis rechargez la page.</p>
     } @else if (products.value(); as result) {
       @if (result.content.length === 0) {
-        <p class="muted">Aucun produit ne correspond à votre recherche.</p>
+        <p class="muted">{{ copy().empty }} <a [routerLink]="[]">Voir tout</a></p>
+      } @else if (kind() === 'SERVICE') {
+        <app-service-list [services]="result.content" />
       } @else {
-        <ul class="grid">
-          @for (product of result.content; track product.id) {
-            <li class="card product">
-              <a [routerLink]="['/products', product.slug]" class="product__link">
-                <div class="product__image">
-                  @if (product.imageUrl) {
-                    <img [src]="product.imageUrl" [alt]="product.name" loading="lazy" />
-                  }
-                </div>
-                <h2>{{ product.name }}</h2>
-              </a>
-              <div class="row spread">
-                <span class="price">{{ product.price.amount | currency: product.price.currency }}</span>
-                @if (!product.inStock) {
-                  <span class="status">Rupture</span>
-                }
-              </div>
-            </li>
-          }
-        </ul>
-        @if (result.page.totalPages > 1) {
-          <nav class="row pagination" aria-label="Pagination">
-            <button type="button" class="btn secondary" [disabled]="result.page.number === 0" (click)="goToPage(result.page.number - 1)">
-              Précédent
-            </button>
-            <span class="muted">Page {{ result.page.number + 1 }} / {{ result.page.totalPages }}</span>
-            <button type="button" class="btn secondary" [disabled]="result.page.number + 1 >= result.page.totalPages" (click)="goToPage(result.page.number + 1)">
-              Suivant
-            </button>
-          </nav>
-        }
+        <app-product-grid [products]="result.content" />
+      }
+      @if (result.page.totalPages > 1) {
+        <nav class="row pagination" aria-label="Pagination">
+          <button type="button" class="btn secondary" [disabled]="result.page.number === 0" (click)="goToPage(result.page.number - 1)">
+            Précédent
+          </button>
+          <span class="muted">Page {{ result.page.number + 1 }} sur {{ result.page.totalPages }}</span>
+          <button type="button" class="btn secondary" [disabled]="result.page.number + 1 >= result.page.totalPages" (click)="goToPage(result.page.number + 1)">
+            Suivant
+          </button>
+        </nav>
       }
     } @else {
       <p class="muted">Chargement…</p>
     }
+
+    @if (kind() === 'SERVICE') {
+      <aside class="custom card">
+        <div>
+          <h2>Besoin d’un accompagnement sur mesure ?</h2>
+          <p class="muted">Décrivez votre projet, nous revenons vers vous sous {{ brand.responseTime }} avec une proposition.</p>
+        </div>
+        <a routerLink="/devis" class="btn">Demander un devis</a>
+      </aside>
+    }
   `,
   styles: `
-    .filters { margin-bottom: 1.5rem; }
+    .intro { max-width: 44rem; margin-bottom: 2rem; }
+    .intro h1 { margin-bottom: 0.5rem; }
+    .intro p { margin: 0; font-size: 1.0625rem; }
+    .filters { margin-bottom: 2rem; }
     .grow { flex: 1 1 16rem; }
-    .grid {
-      list-style: none;
-      margin: 0;
-      padding: 0;
+    .pagination { justify-content: center; margin-top: 2.5rem; }
+    .custom {
       display: grid;
-      gap: 1rem;
-      grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+      gap: 1rem 2rem;
+      align-items: center;
+      margin-top: 3rem;
+      border-left: 4px solid var(--accent);
     }
-    .product { display: grid; gap: 0.75rem; align-content: space-between; }
-    .product__link { color: inherit; text-decoration: none; }
-    .product__image {
-      aspect-ratio: 4 / 3;
-      border-radius: calc(var(--radius) - 0.25rem);
-      background: var(--bg);
-      overflow: hidden;
-      img { width: 100%; height: 100%; object-fit: cover; }
+    @media (min-width: 48rem) {
+      .custom { grid-template-columns: 1fr auto; }
     }
-    h2 { font-size: 1rem; font-weight: 500; margin: 0.75rem 0 0; }
-    .pagination { justify-content: center; margin-top: 2rem; }
+    .custom h2 { margin: 0 0 0.25rem; font-size: 1.25rem; }
+    .custom p { margin: 0; }
   `,
 })
 export class CatalogPage {
   private readonly api = inject(Api);
   private readonly router = inject(Router);
+  protected readonly brand = BRAND;
 
+  /** From the route data. */
+  readonly kind = input<ProductKind>('PRODUCT');
   /** Bound from the query string (?q=&category=&page=). */
   readonly q = input<string>();
   readonly category = input<string>();
   readonly page = input(0, { transform: (value: unknown) => numberAttribute(value, 0) });
 
-  protected readonly categories = resource({ loader: () => this.api.invoke(catalogCategories) });
+  protected readonly copy = computed(() => COPY[this.kind()]);
+
+  protected readonly categories = resource({
+    params: () => ({ kind: this.kind() }),
+    loader: ({ params }) => this.api.invoke(catalogCategories, params),
+  });
 
   protected readonly products = resource({
-    params: () => ({ q: this.q() || undefined, category: this.category() || undefined, page: this.page() }),
+    params: () => ({
+      kind: this.kind(),
+      q: this.q() || undefined,
+      category: this.category() || undefined,
+      page: this.page(),
+    }),
     loader: ({ params }) => this.api.invoke(catalogProducts, { ...params, size: PAGE_SIZE }),
   });
 

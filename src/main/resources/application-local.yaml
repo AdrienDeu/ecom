@@ -3,6 +3,9 @@ spring:
   docker:
     compose:
       lifecycle-management: start-only
+  flyway:
+    # Catalogue de démonstration (conseil et matériel), jamais chargé hors du poste de développement
+    locations: classpath:db/migration,classpath:db/demo
 
 ecom:
   cors:
