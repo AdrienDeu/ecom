@@ -27,7 +27,7 @@ services:
   # Remplace Cognito en local : émet des jetons d'accès avec les mêmes claims (client_id, token_use, cognito:groups).
   # Issuer : http://localhost:9000/ecom — la page de login interactive permet de choisir le sub et les claims.
   oidc:
-    image: ghcr.io/navikt/mock-oauth2-server:3.0.1
+    image: ghcr.io/navikt/mock-oauth2-server:6.1.3
     ports:
       - "9000:8080"
     environment:
