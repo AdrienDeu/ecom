@@ -40,6 +40,10 @@ updates:
         patterns: ["@angular/*", "@angular-devkit/*", "@schematics/angular", "angular-eslint", "@angular-eslint/*"]
       npm-minor-patch:
         update-types: [minor, patch]
+    ignore:
+      # Angular 22 (@angular/build) n'accepte pas TypeScript 7 : monter avec Angular, qui fixe sa propre plage
+      - dependency-name: typescript
+        versions: [">=7"]
 
   - package-ecosystem: docker-compose
     directory: /
