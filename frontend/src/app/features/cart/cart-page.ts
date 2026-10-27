@@ -93,7 +93,7 @@ import { Icon } from '../../shared/icon';
       }
       .lines tr:last-child { border-bottom: 0; }
       .lines td { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0; border: 0; }
-      .lines td:first-child { grid-column: 1; }
+      .lines td:first-child { display: block; grid-column: 1; }
       .lines td.remove { grid-column: 2; grid-row: 1; align-items: start; }
       .lines td[data-label] { grid-column: 1 / -1; }
       .lines td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: 0.875rem; font-weight: 400; }
