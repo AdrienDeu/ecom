@@ -32,6 +32,23 @@ export function orderStatusFilterLabel(status: OrderStatus): string {
   return service ? `${ORDER_STATUS_LABELS[status]} / ${service.toLowerCase()}` : ORDER_STATUS_LABELS[status];
 }
 
+/** Colour family of a status pill: waiting on someone, under way, done, or closed. */
+export type StatusTone = 'pending' | 'active' | 'done' | 'closed';
+
+const ORDER_STATUS_TONES: Record<OrderStatus, StatusTone> = {
+  CREATED: 'pending',
+  PAYMENT_PENDING: 'pending',
+  PAID: 'active',
+  SHIPPED: 'active',
+  DELIVERED: 'done',
+  CANCELLED: 'closed',
+  REFUNDED: 'closed',
+};
+
+export function orderStatusTone(status: OrderStatus): StatusTone {
+  return ORDER_STATUS_TONES[status];
+}
+
 /** Unpaid orders can still be cancelled by the customer. */
 export function isCancellable(status: OrderStatus): boolean {
   return status === 'CREATED' || status === 'PAYMENT_PENDING';

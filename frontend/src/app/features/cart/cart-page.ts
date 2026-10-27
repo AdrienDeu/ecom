@@ -4,10 +4,11 @@ import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
 import { CartStore } from '../../core/cart.store';
 import { errorMessage } from '../../core/errors';
+import { Icon } from '../../shared/icon';
 
 @Component({
   selector: 'app-cart-page',
-  imports: [CurrencyPipe, RouterLink],
+  imports: [CurrencyPipe, RouterLink, Icon],
   template: `
     <h1>Panier</h1>
     @if (error(); as e) {
@@ -17,8 +18,8 @@ import { errorMessage } from '../../core/errors';
       @if (cart.lines.length === 0) {
         <p class="muted">Votre panier est vide. Parcourez les <a routerLink="/conseil">forfaits de conseil</a> ou le <a routerLink="/materiel">matériel</a>.</p>
       } @else {
-        <div class="card table-scroll">
-          <table>
+        <div class="card">
+          <table class="lines">
             <thead>
               <tr>
                 <th>Produit</th>
@@ -40,16 +41,21 @@ import { errorMessage } from '../../core/errors';
                       <div class="field-error">Indisponible en quantité suffisante</div>
                     }
                   </td>
-                  <td class="price">{{ line.unitPrice.amount | currency: line.unitPrice.currency }}</td>
-                  <td>
+                  <td class="price" data-label="Prix unitaire">{{ line.unitPrice.amount | currency: line.unitPrice.currency }}</td>
+                  <td data-label="Quantité">
                     <label>
                       <span class="sr-only">Quantité pour {{ line.name }}</span>
                       <input type="number" min="0" max="99" class="qty" [value]="line.quantity" [disabled]="busy()"
                              (change)="setQuantity(line.productId, $any($event.target).valueAsNumber)" />
                     </label>
                   </td>
-                  <td class="price">{{ line.lineTotal.amount | currency: line.lineTotal.currency }}</td>
-                  <td><button type="button" class="link" [disabled]="busy()" (click)="remove(line.productId)">Retirer</button></td>
+                  <td class="price" data-label="Total">{{ line.lineTotal.amount | currency: line.lineTotal.currency }}</td>
+                  <td class="remove">
+                    <button type="button" class="link" [disabled]="busy()" (click)="remove(line.productId)"
+                            [attr.aria-label]="'Retirer ' + line.name + ' du panier'" title="Retirer du panier">
+                      <app-icon name="trash" />
+                    </button>
+                  </td>
                 </tr>
               }
             </tbody>
@@ -72,6 +78,26 @@ import { errorMessage } from '../../core/errors';
   `,
   styles: `
     .qty { width: 5rem; }
+    .remove { text-align: right; }
+    .remove button { padding: 0.4rem; border-radius: var(--radius); }
+    .remove button:hover:not(:disabled) { color: var(--danger); }
+    /* Narrow screens: each line becomes a small card, the column headers move next to the values */
+    @media (max-width: 40rem) {
+      .lines thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .lines tr {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        gap: 0.35rem 1rem;
+        padding: 0.9rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .lines tr:last-child { border-bottom: 0; }
+      .lines td { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0; border: 0; }
+      .lines td:first-child { grid-column: 1; }
+      .lines td.remove { grid-column: 2; grid-row: 1; align-items: start; }
+      .lines td[data-label] { grid-column: 1 / -1; }
+      .lines td[data-label]::before { content: attr(data-label); color: var(--text-muted); font-size: 0.875rem; font-weight: 400; }
+    }
     .kind { font-size: 0.8125rem; }
     .unavailable td { opacity: 0.7; }
     .summary { margin-top: 1.5rem; }
