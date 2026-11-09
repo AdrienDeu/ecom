@@ -48,7 +48,7 @@ services:
       org.springframework.boot.ignore: "true"
 
   prometheus:
-    image: prom/prometheus:v3.15.1
+    image: prom/prometheus:v3.16.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-lifecycle
